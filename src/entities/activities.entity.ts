@@ -1,21 +1,32 @@
 import { BaseEntity } from './base.entity';
-import { Column, Entity } from 'typeorm';
+import { Column, Entity, EntityManager } from 'typeorm';
 import { TableNames } from './table-names';
 
-@Entity(TableNames.ACCOUNTS)
-export class AccountsEntity extends BaseEntity {
+@Entity(TableNames.ACTIVITIES)
+export class ActivitiesEntity extends BaseEntity {
   @Column()
-  uuid: string;
+  transactionId: number;
 
   @Column()
-  index: number;
+  tokenId: number;
 
   @Column()
-  networkAesKey: string;
+  actionId: number;
 
   @Column()
-  privateKey: string;
+  from: string;
 
   @Column()
-  address: string;
+  to: string;
+
+  @Column()
+  data: string;
 }
+
+export const createActivityEntity = async (
+  manager: EntityManager,
+  activity?: Partial<ActivitiesEntity>,
+): Promise<ActivitiesEntity> => {
+  const newActivity = manager.create(ActivitiesEntity, activity);
+  return manager.save(newActivity);
+};

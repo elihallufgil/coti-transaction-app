@@ -1,7 +1,10 @@
 import { ConfigModule } from '@nestjs/config';
 import { ObjectSchema } from 'joi';
 
-export function getEnvValidationModule(validationSchema: ObjectSchema, envFileName?: string) {
+export function getEnvValidationModule(
+  validationSchema: ObjectSchema,
+  envFileName?: string,
+) {
   return ConfigModule.forRoot({
     isGlobal: true,
     envFilePath: envFileName || '.env',

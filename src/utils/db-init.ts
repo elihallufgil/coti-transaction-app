@@ -1,16 +1,13 @@
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import {
-  AddressBooksEntity,
-  AesKeysEntity,
+  AccountsEntity,
+  ActionsEntity,
+  ActivitiesEntity,
+  AppStatesEntity,
+  TransactionsEntity,
   NetworksEntity,
-  Oauth2LoginProfilesEntity,
-  Oauth2LoginsEntity,
-  OtpsEntity,
   TokensEntity,
-  UsersEntity,
-  UserWalletsEntity,
-  UserWalletTokensEntity,
 } from '../entities';
 
 export function getTypeOrmModule() {
@@ -26,16 +23,13 @@ export function getTypeOrmModule() {
       password: configService.get<string>('DB_PASSWORD'),
       database: configService.get<string>('DB_NAME'),
       entities: [
-        UsersEntity,
-        OtpsEntity,
-        Oauth2LoginsEntity,
-        Oauth2LoginProfilesEntity,
-        UserWalletsEntity,
+        AccountsEntity,
+        ActionsEntity,
+        ActivitiesEntity,
+        AppStatesEntity,
         NetworksEntity,
-        AddressBooksEntity,
-        AesKeysEntity,
         TokensEntity,
-        UserWalletTokensEntity,
+        TransactionsEntity,
       ],
       connectTimeout: 60 * 60 * 1000,
       timezone: 'Z',

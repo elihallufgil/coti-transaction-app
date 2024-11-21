@@ -1,14 +1,18 @@
-import { Injectable, InternalServerErrorException, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { AppStateNames } from '@app/shared/enums';
-import { exec, sleep } from '@app/shared/utils';
 import { CronService } from './cron.service';
-import moment from 'moment';
-import { ZimzamMonitorEnvVariableNames } from '../types';
+import * as moment from 'moment';
 import { DataSource } from 'typeorm';
-import { TableNames } from '@app/shared/entities';
-import { AppStatesEntity } from '@app/shared/entities/monitor';
+import { exec, sleep } from '../utils/helpers';
+import { AppStateNames } from '../types/app-state-names';
+import { AppStatesEntity, TableNames } from '../entities';
+import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 
 const iterationCounter: Map<string, number> = new Map();
 
@@ -36,31 +40,34 @@ export class AppInitService implements OnModuleInit {
   async initAppStateOnDB() {
     const manager = this.datasource.manager;
     try {
-      const [appStatesError, appStates] = await exec(manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).find());
-      if (appStatesError) throw new InternalServerErrorException(appStatesError);
+      const [appStatesError, appStates] = await exec(
+        manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).find(),
+      );
+      if (appStatesError)
+        throw new InternalServerErrorException(appStatesError);
 
       const appStateArr = [];
-      if (!appStates.find(appState => appState.name === AppStateNames.COTI_LATEST_MONITORED_BLOCK)) {
+      if (
+        !appStates.find(
+          (appState) => appState.name === AppStateNames.ACCOUNT_INDEX,
+        )
+      ) {
         appStateArr.push(
           manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).create({
-            name: AppStateNames.COTI_LATEST_MONITORED_BLOCK,
-            value: '0',
-          }),
-        );
-      }
-
-      if (!appStates.find(appState => appState.name === AppStateNames.COTI_LATEST_INDEXED_BLOCK)) {
-        appStateArr.push(
-          manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).create({
-            name: AppStateNames.COTI_LATEST_INDEXED_BLOCK,
-            value: '0',
+            name: AppStateNames.ACCOUNT_INDEX,
+            value: '1',
           }),
         );
       }
 
       if (appStateArr.length > 0) {
-        const [appStateError] = await exec(manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).save(appStateArr));
-        if (appStateError) throw new InternalServerErrorException(appStateError);
+        const [appStateError] = await exec(
+          manager
+            .getRepository<AppStatesEntity>(TableNames.APP_STATES)
+            .save(appStateArr),
+        );
+        if (appStateError)
+          throw new InternalServerErrorException(appStateError);
       }
 
       return;
@@ -70,17 +77,29 @@ export class AppInitService implements OnModuleInit {
     }
   }
 
-  async runEveryXSeconds(name: string, functionToRun: () => Promise<any>, minIntervalInSeconds: number, enable: boolean) {
+  async runEveryXSeconds(
+    name: string,
+    functionToRun: () => Promise<any>,
+    minIntervalInSeconds: number,
+    enable: boolean,
+  ) {
     if (!enable) return;
     try {
       let lastActivationTime: number;
       iterationCounter.set(name, 1);
       while (true) {
-        this.logger.log(`Task [${name}][iteration ${iterationCounter.get(name)}] started`);
+        this.logger.log(
+          `Task [${name}][iteration ${iterationCounter.get(name)}] started`,
+        );
         lastActivationTime = moment.now();
         const [error] = await exec(functionToRun());
-        if (error) this.logger.error(`Task [${name}][iteration ${iterationCounter.get(name)}] [${error.message || error}]`);
-        this.logger.log(`Task [${name}][iteration ${iterationCounter.get(name)}] ended`);
+        if (error)
+          this.logger.error(
+            `Task [${name}][iteration ${iterationCounter.get(name)}] [${error.message || error}]`,
+          );
+        this.logger.log(
+          `Task [${name}][iteration ${iterationCounter.get(name)}] ended`,
+        );
 
         const now = moment.now();
         const timeDiffInSeconds = (now - lastActivationTime) / 1000;
@@ -97,13 +116,31 @@ export class AppInitService implements OnModuleInit {
   }
 
   async intervalInitialization(): Promise<void> {
-    const monitorBlockInterval = this.configService.get<number>(ZimzamMonitorEnvVariableNames.MONITOR_BLOCK_INTERVAL_IN_SECONDS);
-    const monitorBlockEnable = this.configService.get<boolean>(ZimzamMonitorEnvVariableNames.MONITOR_BLOCK_ENABLED);
+    const runActivitiesInterval = this.configService.get<number>(
+      CotiTransactionsEnvVariableNames.RUN_ACTIVITIES_INTERVAL_IN_SECONDS,
+    );
+    const runActivitiesEnabled = this.configService.get<boolean>(
+      CotiTransactionsEnvVariableNames.RUN_ACTIVITIES_ENABLED,
+    );
+    const checkTransactionCompleteInterval = this.configService.get<number>(
+      CotiTransactionsEnvVariableNames.CHECK_TRANSACTION_COMPLETE_INTERVAL_IN_SECONDS,
+    );
+    const checkTransactionCompleteEnabled = this.configService.get<boolean>(
+      CotiTransactionsEnvVariableNames.CHECK_TRANSACTION_COMPLETE_ENABLED,
+    );
 
-    const indexActivitiesInterval = this.configService.get<number>(ZimzamMonitorEnvVariableNames.INDEX_ACTIVITIES_INTERVAL_IN_SECONDS);
-    const indexActivitiesEnable = this.configService.get<boolean>(ZimzamMonitorEnvVariableNames.INDEX_ACTIVITIES_ENABLED);
+    this.runEveryXSeconds(
+      'RUN ACTIVITIES',
+      this.cronService.runActivities.bind(this.cronService),
+      runActivitiesInterval,
+      runActivitiesEnabled,
+    );
 
-    this.runEveryXSeconds('MONITOR BLOCKS', this.cronService.monitorInBlockCotiTransactionsWrapper.bind(this.cronService), monitorBlockInterval, monitorBlockEnable);
-    this.runEveryXSeconds('INDEX ACTIVITIES', this.cronService.indexActivitiesWrapper.bind(this.cronService), indexActivitiesInterval, indexActivitiesEnable);
+    this.runEveryXSeconds(
+      'CHECK TRANSACTIONS COMPLETE',
+      this.cronService.checkTransactionsComplete.bind(this.cronService),
+      checkTransactionCompleteInterval,
+      checkTransactionCompleteEnabled,
+    );
   }
 }

@@ -1,0 +1,20 @@
+import { AppEnvVariableNames } from '@app/shared/types';
+
+export class ZimzamApiEnvVariableNames extends AppEnvVariableNames {
+  static readonly HOST_URL = 'HOST_URL';
+  static readonly CLIENT_URL = 'CLIENT_URL';
+  static readonly SENDGRID_API_KEY = 'SENDGRID_API_KEY';
+  static readonly SENDGRID_FROM_EMAIL = 'SENDGRID_FROM_EMAIL';
+  static readonly SENDGRID_FROM_NAME = 'SENDGRID_FROM_NAME';
+  static readonly SENDGRID_TEMPLATE_OTP = 'SENDGRID_TEMPLATE_OTP';
+  static readonly SESSION_SECRET = 'SESSION_SECRET';
+  static readonly SESSION_SECURE_COOKIE = 'SESSION_SECURE_COOKIE';
+  static readonly SESSION_COOKIE_NAME = 'SESSION_COOKIE_NAME';
+  static readonly SESSION_INACTIVITY_EXPIRATION_IN_MINUTES = 'SESSION_INACTIVITY_EXPIRATION_IN_MINUTES';
+  static readonly OAUTH2_GOOGLE_CLIENT_ID = 'OAUTH2_GOOGLE_CLIENT_ID';
+  static readonly OAUTH2_GOOGLE_CLIENT_SECRET = 'OAUTH2_GOOGLE_CLIENT_SECRET';
+  static readonly OAUTH2_GOOGLE_API_URL = 'OAUTH2_GOOGLE_API_URL';
+  static readonly OAUTH2_GOOGLE_API_USERINFO_PATH = 'OAUTH2_GOOGLE_API_USERINFO_PATH';
+  static readonly AUTH_OTP_EXPIRATION_IN_MINUTES = 'AUTH_OTP_EXPIRATION_IN_MINUTES';
+  static readonly AUTH_BCRYPT_SALT_ROUNDS = 'AUTH_BCRYPT_SALT_ROUNDS';
+}

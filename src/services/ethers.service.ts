@@ -101,6 +101,20 @@ export class EthersService {
     return this.provider.getBalance(address);
   }
 
+  async getBalances(addresses: string[]): Promise<Map<string, bigint>> {
+    const promises = [];
+    const balanceMap = new Map<string, bigint>();
+    for (const address of addresses) {
+      promises.push(
+        this.provider
+          .getBalance(address)
+          .then((x) => balanceMap.set(address, x)),
+      );
+    }
+    await Promise.all(promises);
+    return balanceMap;
+  }
+
   async getErc20Details(contractAddress: string) {
     const erc20 = ERC20__factory.connect(contractAddress, this.provider);
     const details: { name: string; symbol: string; decimals: bigint } = {

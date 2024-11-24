@@ -1,5 +1,5 @@
 import { BaseEntity } from './base.entity';
-import { Column, Entity, EntityManager, In } from 'typeorm';
+import { Column, Entity, EntityManager, In, IsNull } from 'typeorm';
 import { TableNames } from './table-names';
 import { exec } from '../utils/helpers';
 import { AppStatesEntity } from './app-states.entity';
@@ -45,4 +45,14 @@ export const getAccountByIndex = async (
   index: number,
 ): Promise<AccountsEntity> => {
   return manager.findOne(AccountsEntity, { where: { index } });
+};
+
+export const getAccountsToOnboard = async (
+  manager: EntityManager,
+  take: number,
+): Promise<AccountsEntity[]> => {
+  return manager.find(AccountsEntity, {
+    where: { networkAesKey: IsNull() },
+    take,
+  });
 };

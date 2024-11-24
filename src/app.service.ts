@@ -103,6 +103,11 @@ export class AppService {
         return newWalletEntity;
       },
     );
+    await this.sendCotiFromFaucet({
+      toIndex: newAccount.index,
+      // TODO: make it dynamic
+      amountInCoti: '1',
+    });
     return new AccountResponse(newAccount);
   }
 
@@ -171,13 +176,16 @@ export class AppService {
     if (accountsCountError) {
       throw new InternalServerErrorException('Failed to to get account count');
     }
-    if (accountsCount < params.count) {
+
+    const doubleCount = params.count * 2;
+    // we need it to be double so we can send and receive to unique indexes
+    if (accountsCount < doubleCount) {
       throw new BadRequestException(
-        `The requested ids count ${params.count} is greater than the existing accounts count ${accountsCount}`,
+        `The requested ids count times 2 for send and receive ${doubleCount} is greater than the existing accounts count ${accountsCount}`,
       );
     }
     const indexes: number[] = [];
-    while (indexes.length < params.count) {
+    while (indexes.length < doubleCount) {
       const random = Math.random();
       const index = Math.round(random * accountsCount);
       if (indexes.includes(index)) continue;

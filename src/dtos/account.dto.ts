@@ -1,11 +1,5 @@
 import { AccountsEntity } from '../entities';
-import {
-  IsInt,
-  IsNumber,
-  IsNumberString,
-  IsString,
-  Min,
-} from 'class-validator';
+import { IsInt, IsNumber, IsNumberString, Min } from 'class-validator';
 
 export class PickRandomAccountsToSendCotiRequest {
   @IsInt()

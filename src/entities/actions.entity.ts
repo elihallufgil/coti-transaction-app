@@ -1,14 +1,12 @@
 import { BaseEntity } from './base.entity';
 import { Column, Entity, EntityManager } from 'typeorm';
 import { TableNames } from './table-names';
-import { exec } from '../utils/helpers';
-import { AppStatesEntity } from './app-states.entity';
 import { ActionEnum } from '../enums/action.enum';
 
 @Entity(TableNames.ACTIONS)
 export class ActionsEntity extends BaseEntity {
   @Column()
-  type: string;
+  type: ActionEnum;
 
   @Column()
   randomRange: number;

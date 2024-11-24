@@ -23,76 +23,14 @@ services:
     ports:
       - "6379:6379"
 
-  zimzam-api:
-    container_name: zimzam-api
+  coti-transaction-app:
+    container_name: coti-transaction-app
     build:
       context: ${BUILD_CONTEXT:-.}
-      args:
-        APPLICATION_NAME: zimzam-api
-    image: ${ZIMZAM_API_IMAGE:-zimzam-apps/zimzam-api:latest}
-    environment:
-      APP_ADAPTER_TRUST_PROXY: ${ZIMZAM_API_ADAPTER_TRUST_PROXY:-true}
-      APP_ADAPTER_LOGGER_ENABLED: ${ZIMZAM_API_ADAPTER_LOGGER_ENABLED:-false}
+    image: ${IMAGE_NAME:-coti-transaction-app:latest}
     volumes:
-      - ${ZIMZAM_API_ENV_FILE:-./.env.zimzam-api}:/app/.env.zimzam-api
+      - ${ENV_FILE:-./.env.coti-transactions}:/app/.env.coti-transactions
     ports:
-      - 3000:${ZIMZAM_API_PORT:-3000}
+      - ${PORT:-3000}:${DOCKER_PORT:-3000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  zimzam-monitor-devnet:
-    container_name: zimzam-monitor-devnet
-    build:
-      context: ${BUILD_CONTEXT:-.}
-      args:
-        APPLICATION_NAME: zimzam-monitor
-    image: ${ZIMZAM_MONITOR_IMAGE:-zimzam-apps/zimzam-monitor:latest}
-    volumes:
-      - ${ZIMZAM_MONITOR_DEVNET_ENV_FILE:-./.env.zimzam-monitor-devnet}:/app/.env.zimzam-monitor
-    ports:
-      - 3001:${ZIMZAM_MONITOR_DEVNET_PORT:-3000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  zimzam-monitor-testnet:
-    container_name: zimzam-monitor-testnet
-    build:
-      context: ${BUILD_CONTEXT:-.}
-      args:
-        APPLICATION_NAME: zimzam-monitor
-    image: ${ZIMZAM_MONITOR_IMAGE:-zimzam-apps/zimzam-monitor:latest}
-    volumes:
-      - ${ZIMZAM_MONITOR_TESTNET_ENV_FILE:-./.env.zimzam-monitor-testnet}:/app/.env.zimzam-monitor
-    ports:
-      - 3002:${ZIMZAM_MONITOR_TESTNET_PORT:-3000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  zimzam-monitor-api-devnet:
-    container_name: zimzam-monitor-api-devnet
-    build:
-      context: ${BUILD_CONTEXT:-.}
-      args:
-        APPLICATION_NAME: zimzam-monitor-api
-    image: ${ZIMZAM_MONITOR_API_IMAGE:-zimzam-apps/zimzam-monitor-api:latest}
-    volumes:
-      - ${ZIMZAM_MONITOR_API_DEVNET_ENV_FILE:-./.env.zimzam-monitor-api-devnet}:/app/.env.zimzam-monitor-api
-    ports:
-      - 3003:${ZIMZAM_MONITOR_API_DEVNET_PORT:-3000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  zimzam-monitor-api-testnet:
-    container_name: zimzam-monitor-api-testnet
-    build:
-      context: ${BUILD_CONTEXT:-.}
-      args:
-        APPLICATION_NAME: zimzam-monitor-api
-    image: ${ZIMZAM_MONITOR_API_IMAGE:-zimzam-apps/zimzam-monitor-api:latest}
-    volumes:
-      - ${ZIMZAM_MONITOR_API_TESTNET_ENV_FILE:-./.env.zimzam-monitor-api-testnet}:/app/.env.zimzam-monitor-api
-    ports:
-      - 3004:${ZIMZAM_MONITOR_API_TESTNET_PORT:-3000}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-

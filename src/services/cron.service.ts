@@ -12,6 +12,7 @@ import {
   getAccountsByIndexes,
   getAccountsToOnboard,
   getAllActions,
+  getLastHourActivityPerAction,
   getTransactionWithStatusNull,
 } from '../entities';
 import { formatEther, TransactionReceipt } from 'ethers';
@@ -96,8 +97,24 @@ export class CronService {
     // TODO: complete this function
     const manager = this.datasource.manager;
     const actions = await getAllActions(manager);
-    const filteredActions = actions.filter((x) => x.randomRange > 0);
-    console.table(filteredActions, ['type', 'randomRange']);
+    const lastHourActivityPerActionMap =
+      await getLastHourActivityPerAction(manager);
+    const extendedActions: (ActionsEntity & {
+      lastHourActivityCount: number;
+    })[] = actions.map((x) => ({
+      ...x,
+      lastHourActivityCount: lastHourActivityPerActionMap.get(x.type) || 0,
+    }));
+
+    console.table(extendedActions, [
+      'type',
+      'randomRange',
+      'maxPerHour',
+      'lastHourActivityCount',
+    ]);
+    const filteredActions = extendedActions.filter(
+      (x) => x.randomRange > 0 && x.lastHourActivityCount < x.maxPerHour,
+    );
     const actionPromises = [];
     if (filteredActions.length === 0) return;
     for (const action of filteredActions) {
@@ -111,16 +128,13 @@ export class CronService {
         case ActionEnum.OnboardAccount:
           actionPromises.push(this.handleOnboardAccount(action));
           break;
+        case ActionEnum.SendCotiFromFaucet:
+          actionPromises.push(this.handleSendCotiFromFaucet(action));
+          break;
       }
     }
 
     await Promise.allSettled(actionPromises);
-
-    // select all activities from the db
-    // go over each activity and run it with all settled
-    // currently we handle fill from faucet
-    // onboard
-    // send coti
   }
 
   async handleCreateAccount(action: ActionsEntity) {
@@ -157,8 +171,19 @@ export class CronService {
     const sendingCotiPromises = [];
 
     while (accounts.length) {
-      const sendingAccount = accounts.pop();
-      const receivingAccount = accounts.pop();
+      const firstAccount = accounts.pop();
+      const secondAccount = accounts.pop();
+      const firstAccountBalance = balanceMap.get(firstAccount.address);
+      const secondAccountBalance = balanceMap.get(secondAccount.address);
+      let sendingAccount;
+      let receivingAccount;
+      if (firstAccountBalance >= secondAccountBalance) {
+        sendingAccount = firstAccount;
+        receivingAccount = secondAccount;
+      } else {
+        sendingAccount = secondAccount;
+        receivingAccount = firstAccount;
+      }
       const sendingAccountBalance = balanceMap.get(sendingAccount.address);
       if (sendingAccountBalance === 0n) continue;
       // TODO: make it dynamic
@@ -193,5 +218,28 @@ export class CronService {
       );
     }
     await Promise.allSettled(onboardPromises);
+  }
+
+  async handleSendCotiFromFaucet(action: ActionsEntity) {
+    const randomRange = action.randomRange;
+    const activityCount = Math.round(Math.random() * randomRange);
+    this.logger.log(
+      `[runActivities][handleSendCoti] activityCount/randomRange ${activityCount}/${randomRange}`,
+    );
+    if (activityCount === 0) return;
+    const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
+      count: activityCount,
+    });
+    const sendingCotiPromises = [];
+    for (const index of accountIndexesRes.accountsIndexes) {
+      const refillAmount = Math.random().toFixed(2);
+      sendingCotiPromises.push(
+        this.appService.sendCotiFromFaucet({
+          toIndex: index,
+          amountInCoti: refillAmount.toString(),
+        }),
+      );
+    }
+    await Promise.allSettled(sendingCotiPromises);
   }
 }

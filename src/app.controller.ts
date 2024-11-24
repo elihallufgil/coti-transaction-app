@@ -9,6 +9,7 @@ import {
   SendCotiFromFaucetRequest,
 } from './dtos/account.dto';
 import { TransactionResponse } from 'ethers';
+import { getLastHourActivityPerAction } from './entities';
 
 @Controller()
 export class AppController {

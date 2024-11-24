@@ -15,6 +15,7 @@ import {
   getAccountsByIndexes,
   getActionByType,
   getAppStateByName,
+  getLastHourActivityPerAction,
 } from './entities';
 import { DataSource, EntityManager } from 'typeorm';
 import { exec } from './utils/helpers';
@@ -186,6 +187,32 @@ export class AppService {
     }
     const indexes: number[] = [];
     while (indexes.length < doubleCount) {
+      const random = Math.random();
+      const index = Math.round(random * accountsCount);
+      if (indexes.includes(index)) continue;
+      indexes.push(index);
+    }
+    return { accountsIndexes: indexes };
+  }
+
+  async pickRandomAccountsToRefill(
+    params: PickRandomAccountsToSendCotiRequest,
+  ): Promise<PickRandomAccountsToSendCotiResponse> {
+    const manager = this.dataSource.manager;
+    const [accountsCountError, accountsCount] = await exec(
+      getAccountCount(manager),
+    );
+    if (accountsCountError) {
+      throw new InternalServerErrorException('Failed to to get account count');
+    }
+
+    if (accountsCount < params.count) {
+      throw new BadRequestException(
+        `The requested ids count refill ${params.count} is greater than the existing accounts count ${accountsCount}`,
+      );
+    }
+    const indexes: number[] = [];
+    while (indexes.length < params.count) {
       const random = Math.random();
       const index = Math.round(random * accountsCount);
       if (indexes.includes(index)) continue;

@@ -10,6 +10,9 @@ export class ActionsEntity extends BaseEntity {
 
   @Column()
   randomRange: number;
+
+  @Column()
+  maxPerHour: number;
 }
 
 export const getActionByType = async (

@@ -8,7 +8,6 @@ import {
   parseEther,
   Provider,
   Transaction,
-  TransactionLike,
   TransactionReceipt,
   TransactionResponse,
   Wallet,
@@ -17,12 +16,10 @@ import {
 
 import { OnboardInfo, Wallet as CotiWallet } from '@coti-io/coti-ethers';
 import {
-  AccountOnboard__factory,
   ERC20__factory,
-  PrivateERC20__factory,
+  ERC20Token__factory,
+  PrivateERC20Token__factory,
 } from '../typechain-types';
-import { AccountOnboardedEvent } from '../typechain-types/AccountOnboard';
-import { recoverUserKey } from '@coti-io/coti-sdk-typescript';
 import { ConfigService } from '@nestjs/config';
 import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 
@@ -130,19 +127,6 @@ export class EthersService {
     return details;
   }
 
-  async isPrivateErc20(contractAddress: string) {
-    const privateERC20 = PrivateERC20__factory.connect(
-      contractAddress,
-      this.provider,
-    );
-    try {
-      await privateERC20['accountEncryptionAddress(address)'](contractAddress);
-      return true;
-    } catch (error) {
-      return false;
-    }
-  }
-
   async getErc20Balance(
     contractAddress: string,
     address: string,
@@ -155,7 +139,7 @@ export class EthersService {
     contractAddress: string,
     address: string,
   ): Promise<bigint> {
-    const privateERC20 = PrivateERC20__factory.connect(
+    const privateERC20 = PrivateERC20Token__factory.connect(
       contractAddress,
       this.provider,
     );
@@ -170,45 +154,6 @@ export class EthersService {
 
   async getTransaction(hash: string): Promise<TransactionResponse> {
     return this.provider.getTransaction(hash);
-  }
-
-  async onboardAccount(
-    rsaKeys: {
-      publicKey: Uint8Array;
-      privateKey: Uint8Array;
-    },
-    signature: Uint8Array,
-    signer: Wallet,
-    transactionLike: TransactionLike,
-  ): Promise<{ aesKey: string; txHash: string }> {
-    const accountOnboard = AccountOnboard__factory.connect(
-      this.onboardContractAddress,
-      signer,
-    );
-    const receipt = await (
-      await accountOnboard.getFunction('onboardAccount')(
-        rsaKeys.publicKey,
-        signature,
-        transactionLike,
-      )
-    ).wait(1, 10000);
-
-    const accountOnboardedEventLog = receipt?.logs?.shift();
-    if (!accountOnboardedEventLog) {
-      throw new Error('Failed to onboard account');
-    }
-
-    const decodedLog = accountOnboard.interface.parseLog(
-      accountOnboardedEventLog,
-    ) as unknown as AccountOnboardedEvent.LogDescription;
-
-    const userKey1 = decodedLog.args.userKey1.substring(2);
-    const userKey2 = decodedLog.args.userKey2.substring(2);
-
-    return {
-      aesKey: recoverUserKey(rsaKeys.privateKey, userKey1, userKey2),
-      txHash: receipt.hash,
-    };
   }
 
   /**
@@ -244,15 +189,6 @@ export class EthersService {
         to: recipientAddress,
         value: amountInWei, // Amount in Wei
       });
-
-      // // Wait for the transaction to be mined
-      // const receipt = await tx.wait();
-      //
-      // console.log("Transaction successful!");
-      // console.log("Transaction Hash:", receipt.transactionHash);
-      //
-      // // Return the transaction hash
-      // return receipt.transactionHash;
     } catch (error) {
       console.error('Error sending Ethereum:', error);
       throw error;
@@ -309,6 +245,27 @@ export class EthersService {
     } catch (error) {
       console.error('Error fetching transaction response:', error);
       throw error;
+    }
+  }
+
+  async deployToken(params: {
+    privateKey: string;
+    tokenName: string;
+    tokenSymbol: string;
+    decimals: number;
+    owner: string;
+    isPrivate: boolean;
+  }) {
+    const { privateKey, tokenName, tokenSymbol, decimals, owner, isPrivate } =
+      params;
+    const wallet = new Wallet(privateKey, this.provider);
+
+    if (!isPrivate) {
+      const tokenFactory = new ERC20Token__factory(wallet);
+      return tokenFactory.deploy(tokenName, tokenSymbol, decimals, owner);
+    } else {
+      const tokenFactory = new PrivateERC20Token__factory(wallet);
+      return tokenFactory.deploy(tokenName, tokenSymbol, decimals, owner);
     }
   }
 }

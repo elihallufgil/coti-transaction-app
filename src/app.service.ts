@@ -15,7 +15,6 @@ import {
   getAccountsByIndexes,
   getActionByType,
   getAppStateByName,
-  getLastHourActivityPerAction,
 } from './entities';
 import { DataSource, EntityManager } from 'typeorm';
 import { exec } from './utils/helpers';
@@ -110,6 +109,52 @@ export class AppService {
       amountInCoti: '1',
     });
     return new AccountResponse(newAccount);
+  }
+
+  async createNewToken(params: { accountIndex: number }): Promise<any> {
+    const manager = this.dataSource.manager;
+    await manager.transaction(async (transactionManager: EntityManager) => {
+      const [appStateError] = await exec(
+        getAppStateByName(
+          transactionManager,
+          AppStateNames.CREATE_TOKEN_LOCK,
+          true,
+        ),
+      );
+      if (appStateError) {
+        throw new InternalServerErrorException('Could not get wallet index');
+      }
+      const [actionError, action] = await exec(
+        getActionByType(transactionManager, ActionEnum.CreateToken),
+      );
+      if (actionError) {
+        throw new InternalServerErrorException('Could not get action');
+      }
+      const account = await getAccountByIndex(
+        transactionManager,
+        params.accountIndex,
+      );
+      // create new token transaction
+      // TODO: replace temp
+      const temp = '';
+      const [newActivityError] = await exec(
+        createActivityEntity(transactionManager, {
+          actionId: action.id,
+          data: `create new token ${temp} account address: ${account.address}`,
+        }),
+      );
+      if (newActivityError) {
+        throw new InternalServerErrorException(
+          'Failed to send deploy token transaction',
+        );
+      }
+      // if (newActivityError) {
+      //   throw new InternalServerErrorException('Failed to create activity');
+      // }
+      // return newWalletEntity;
+    });
+
+    return null;
   }
 
   async sendCotiFromFaucet(
@@ -309,10 +354,10 @@ export class AppService {
           );
         }
 
-        const onboardInfo = await this.ethersService.onboard(
-          account.privateKey,
+        const [onboardInfoError, onboardInfo] = await exec(
+          this.ethersService.onboard(account.privateKey),
         );
-        if (!onboardInfo) {
+        if (onboardInfoError || !onboardInfo) {
           throw new BadRequestException('Failed to onboard');
         }
         const tx = await this.ethersService.getTransactionResponse(

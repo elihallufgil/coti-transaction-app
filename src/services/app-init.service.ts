@@ -60,6 +60,33 @@ export class AppInitService implements OnModuleInit {
         );
       }
 
+      if (
+        !appStates.find(
+          (appState) => appState.name === AppStateNames.CREATE_TOKEN_LOCK,
+        )
+      ) {
+        appStateArr.push(
+          manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).create({
+            name: AppStateNames.CREATE_TOKEN_LOCK,
+            value: '1',
+          }),
+        );
+      }
+
+      if (
+        !appStates.find(
+          (appState) =>
+            appState.name === AppStateNames.CREATE_PRIVATE_TOKEN_LOCK,
+        )
+      ) {
+        appStateArr.push(
+          manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).create({
+            name: AppStateNames.CREATE_PRIVATE_TOKEN_LOCK,
+            value: '1',
+          }),
+        );
+      }
+
       if (appStateArr.length > 0) {
         const [appStateError] = await exec(
           manager

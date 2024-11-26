@@ -17,11 +17,11 @@ import {
   createTokenEntity,
   createTransactionEntity,
   getAccountByIndex,
-  getAccountByToken,
   getAccountCount,
   getAccountsByIndexes,
   getActionByType,
   getAppStateByName,
+  getToken,
   getTokenWithOwnerAccount,
 } from './entities';
 import { DataSource, EntityManager } from 'typeorm';
@@ -37,6 +37,7 @@ import {
   SendCotiFromAccountToAccountRequest,
   SendCotiFromFaucetRequest,
   TokenResponse,
+  TransferTokenToAccountRequest,
 } from './dtos/account.dto';
 import { EthersService } from './services/ethers.service';
 import { ActionEnum } from './enums/action.enum';
@@ -466,12 +467,6 @@ export class AppService {
     const manager = this.dataSource.manager;
     return await manager.transaction(
       async (transactionManager: EntityManager) => {
-        const [actionError, action] = await exec(
-          getActionByType(transactionManager, ActionEnum.MintToken),
-        );
-        if (actionError) {
-          throw new InternalServerErrorException('Could not get action');
-        }
         const [tokenError, token] = await exec(
           getTokenWithOwnerAccount(transactionManager, params.tokenId),
         );
@@ -480,7 +475,17 @@ export class AppService {
             'Failed to get token owner account',
           );
         }
-
+        const [actionError, action] = await exec(
+          getActionByType(
+            transactionManager,
+            token.isPrivate
+              ? ActionEnum.MintPrivateToken
+              : ActionEnum.MintToken,
+          ),
+        );
+        if (actionError) {
+          throw new InternalServerErrorException('Could not get action');
+        }
         const [toAccountsError, toAccount] = await exec(
           getAccountByIndex(transactionManager, params.toIndex),
         );
@@ -514,6 +519,84 @@ export class AppService {
             transactionId: transactionEntity.id,
             tokenId: token.id,
             data: `Mint ${params.tokenAmountInWei} ${token.name} to: ${toAccount.address}`,
+          }),
+        );
+        if (newActivityError) {
+          throw new InternalServerErrorException('Failed to create activity');
+        }
+        return tx;
+      },
+    );
+  }
+
+  async transferToken(
+    params: TransferTokenToAccountRequest,
+  ): Promise<TransactionResponse> {
+    const manager = this.dataSource.manager;
+    return await manager.transaction(
+      async (transactionManager: EntityManager) => {
+        const [tokenError, token] = await exec(
+          getToken(transactionManager, params.tokenId),
+        );
+        if (tokenError) {
+          throw new InternalServerErrorException('Failed to get token');
+        }
+        if (!token) {
+          throw new BadRequestException(
+            `Token with id: ${params.tokenId} does not exists`,
+          );
+        }
+
+        const [actionError, action] = await exec(
+          getActionByType(
+            transactionManager,
+            token.isPrivate
+              ? ActionEnum.TransferPrivateToken
+              : ActionEnum.TransferToken,
+          ),
+        );
+        if (actionError) {
+          throw new InternalServerErrorException('Could not get action');
+        }
+
+        const [fromAccountsError, fromAccount] = await exec(
+          getAccountByIndex(transactionManager, params.fromIndex),
+        );
+        if (fromAccountsError || !fromAccount) {
+          throw new InternalServerErrorException('Failed to get from account');
+        }
+
+        const [toAccountsError, toAccount] = await exec(
+          getAccountByIndex(transactionManager, params.toIndex),
+        );
+        if (toAccountsError || !toAccount) {
+          throw new InternalServerErrorException('Failed to get to account');
+        }
+
+        const tx = await this.ethersService.transferToken({
+          tokenAddress: token.address,
+          to: toAccount.address,
+          weiAmount: params.tokenAmountInWei,
+          networkAesKey: fromAccount.networkAesKey,
+          isPrivate: token.isPrivate,
+          privateKey: fromAccount.privateKey,
+        });
+        const [transactionEntityError, transactionEntity] = await exec(
+          createTransactionEntity(transactionManager, tx),
+        );
+        if (transactionEntityError) {
+          throw new BadRequestException(
+            `Send transaction without saving it or the activity txHash: ${tx.hash}`,
+          );
+        }
+        const [newActivityError] = await exec(
+          createActivityEntity(transactionManager, {
+            actionId: action.id,
+            from: tx.from,
+            to: tx.to,
+            transactionId: transactionEntity.id,
+            tokenId: token.id,
+            data: `Transfer ${params.tokenAmountInWei} ${token.name} from: ${fromAccount.address} to: ${toAccount.address}`,
           }),
         );
         if (newActivityError) {

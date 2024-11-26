@@ -111,3 +111,16 @@ export class MintTokenToAccountRequest {
   @IsNumberString()
   tokenAmountInWei: string;
 }
+
+export class TransferTokenToAccountRequest {
+  @Min(0)
+  @IsNumber()
+  tokenId: number;
+  @Min(0)
+  @IsNumber()
+  toIndex: number;
+  @IsNumber()
+  fromIndex: number;
+  @IsNumberString()
+  tokenAmountInWei: string;
+}

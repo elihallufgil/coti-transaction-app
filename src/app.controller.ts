@@ -10,6 +10,7 @@ import {
   SendCotiFromAccountToAccountRequest,
   SendCotiFromFaucetRequest,
   TokenResponse,
+  TransferTokenToAccountRequest,
 } from './dtos/account.dto';
 import { TransactionResponse } from 'ethers';
 
@@ -44,6 +45,13 @@ export class AppController {
     @Body() body: MintTokenToAccountRequest,
   ): Promise<TransactionResponse> {
     return this.appService.mintToken(body);
+  }
+
+  @Post('transfer-token')
+  async transferToken(
+    @Body() body: TransferTokenToAccountRequest,
+  ): Promise<TransactionResponse> {
+    return this.appService.transferToken(body);
   }
 
   @Post('onboard')

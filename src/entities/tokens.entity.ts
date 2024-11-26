@@ -47,3 +47,12 @@ export const getTokenWithOwnerAccount = async (
     relations: ['ownerAccount'],
   });
 };
+
+export const getToken = async (
+  manager: EntityManager,
+  tokenId: number,
+): Promise<TokensEntity> => {
+  return manager.findOne(TokensEntity, {
+    where: { id: tokenId },
+  });
+};

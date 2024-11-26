@@ -3,6 +3,7 @@ import { AppService } from './app.service';
 import {
   AccountResponse,
   CreateTokenRequest,
+  MintTokenToAccountRequest,
   OnboardAccountRequest,
   PickRandomAccountsToSendCotiRequest,
   PickRandomAccountsToSendCotiResponse,
@@ -36,6 +37,13 @@ export class AppController {
     @Body() body: SendCotiFromFaucetRequest,
   ): Promise<TransactionResponse> {
     return this.appService.sendCotiFromFaucet(body);
+  }
+
+  @Post('mint-token')
+  async mintToken(
+    @Body() body: MintTokenToAccountRequest,
+  ): Promise<TransactionResponse> {
+    return this.appService.mintToken(body);
   }
 
   @Post('onboard')

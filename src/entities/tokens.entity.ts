@@ -1,6 +1,7 @@
 import { BaseEntity } from './base.entity';
-import { Column, Entity, EntityManager } from 'typeorm';
+import { Column, Entity, EntityManager, ManyToOne } from 'typeorm';
 import { TableNames } from './table-names';
+import { AccountsEntity } from './accounts.entity';
 
 @Entity(TableNames.TOKENS)
 export class TokensEntity extends BaseEntity {
@@ -24,6 +25,9 @@ export class TokensEntity extends BaseEntity {
 
   @Column()
   isPrivate: boolean;
+
+  @ManyToOne(() => AccountsEntity, (account) => account.tokens)
+  ownerAccount: AccountsEntity;
 }
 
 export const createTokenEntity = async (
@@ -32,4 +36,14 @@ export const createTokenEntity = async (
 ): Promise<TokensEntity> => {
   const newToken = manager.create(TokensEntity, token);
   return manager.save(newToken);
+};
+
+export const getTokenWithOwnerAccount = async (
+  manager: EntityManager,
+  tokenId: number,
+): Promise<TokensEntity> => {
+  return manager.findOne(TokensEntity, {
+    where: { id: tokenId },
+    relations: ['ownerAccount'],
+  });
 };

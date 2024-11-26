@@ -100,3 +100,14 @@ export class TokenResponse {
     this.updateTime = tokenEntity.updateTime;
   }
 }
+
+export class MintTokenToAccountRequest {
+  @Min(0)
+  @IsNumber()
+  tokenId: number;
+  @Min(0)
+  @IsNumber()
+  toIndex: number;
+  @IsNumberString()
+  tokenAmountInWei: string;
+}

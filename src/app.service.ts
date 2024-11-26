@@ -17,10 +17,12 @@ import {
   createTokenEntity,
   createTransactionEntity,
   getAccountByIndex,
+  getAccountByToken,
   getAccountCount,
   getAccountsByIndexes,
   getActionByType,
   getAppStateByName,
+  getTokenWithOwnerAccount,
 } from './entities';
 import { DataSource, EntityManager } from 'typeorm';
 import { exec } from './utils/helpers';
@@ -28,6 +30,7 @@ import { AppStateNames } from './types/app-state-names';
 import {
   AccountResponse,
   CreateTokenRequest,
+  MintTokenToAccountRequest,
   OnboardAccountRequest,
   PickRandomAccountsToSendCotiRequest,
   PickRandomAccountsToSendCotiResponse,
@@ -447,6 +450,70 @@ export class AppService {
             to: tx.to,
             transactionId: transactionEntity.id,
             data: `Onboard account with address: ${account.address}`,
+          }),
+        );
+        if (newActivityError) {
+          throw new InternalServerErrorException('Failed to create activity');
+        }
+        return tx;
+      },
+    );
+  }
+
+  async mintToken(
+    params: MintTokenToAccountRequest,
+  ): Promise<TransactionResponse> {
+    const manager = this.dataSource.manager;
+    return await manager.transaction(
+      async (transactionManager: EntityManager) => {
+        const [actionError, action] = await exec(
+          getActionByType(transactionManager, ActionEnum.MintToken),
+        );
+        if (actionError) {
+          throw new InternalServerErrorException('Could not get action');
+        }
+        const [tokenError, token] = await exec(
+          getTokenWithOwnerAccount(transactionManager, params.tokenId),
+        );
+        if (tokenError || !token || !token.ownerAccount) {
+          throw new InternalServerErrorException(
+            'Failed to get token owner account',
+          );
+        }
+
+        const [toAccountsError, toAccount] = await exec(
+          getAccountByIndex(transactionManager, params.toIndex),
+        );
+        if (toAccountsError || !toAccount) {
+          throw new InternalServerErrorException('Failed to get to account');
+        }
+
+        const ownerAccount = token.ownerAccount;
+
+        const tx = await this.ethersService.mintToken({
+          tokenAddress: token.address,
+          to: toAccount.address,
+          weiAmount: params.tokenAmountInWei,
+          networkAesKey: ownerAccount.networkAesKey,
+          isPrivate: token.isPrivate,
+          privateKey: ownerAccount.privateKey,
+        });
+        const [transactionEntityError, transactionEntity] = await exec(
+          createTransactionEntity(transactionManager, tx),
+        );
+        if (transactionEntityError) {
+          throw new BadRequestException(
+            `Send transaction without saving it or the activity txHash: ${tx.hash}`,
+          );
+        }
+        const [newActivityError] = await exec(
+          createActivityEntity(transactionManager, {
+            actionId: action.id,
+            from: tx.from,
+            to: tx.to,
+            transactionId: transactionEntity.id,
+            tokenId: token.id,
+            data: `Mint ${params.tokenAmountInWei} ${token.name} to: ${toAccount.address}`,
           }),
         );
         if (newActivityError) {

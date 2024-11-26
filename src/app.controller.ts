@@ -2,14 +2,15 @@ import { Body, Controller, Get, Post } from '@nestjs/common';
 import { AppService } from './app.service';
 import {
   AccountResponse,
+  CreateTokenRequest,
   OnboardAccountRequest,
   PickRandomAccountsToSendCotiRequest,
   PickRandomAccountsToSendCotiResponse,
   SendCotiFromAccountToAccountRequest,
   SendCotiFromFaucetRequest,
+  TokenResponse,
 } from './dtos/account.dto';
 import { TransactionResponse } from 'ethers';
-import { getLastHourActivityPerAction } from './entities';
 
 @Controller()
 export class AppController {
@@ -23,6 +24,11 @@ export class AppController {
   @Post('create-account')
   async createAccount(): Promise<AccountResponse> {
     return this.appService.createAccount();
+  }
+
+  @Post('create-token')
+  async createToken(@Body() body: CreateTokenRequest): Promise<TokenResponse> {
+    return this.appService.createNewToken(body);
   }
 
   @Post('send-coti-from-faucet')

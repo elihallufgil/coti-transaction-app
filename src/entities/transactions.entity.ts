@@ -53,7 +53,7 @@ export class TransactionsEntity extends BaseEntity {
 
 export const createTransactionEntity = async (
   manager: EntityManager,
-  transactionResponse: TransactionResponse,
+  transactionResponse: Partial<TransactionResponse>,
 ): Promise<TransactionsEntity> => {
   const partialTransactionEntity =
     transactionResponseToPartialTransactionEntity(transactionResponse);
@@ -65,7 +65,7 @@ export const createTransactionEntity = async (
 };
 
 export const transactionResponseToPartialTransactionEntity = (
-  tx: TransactionResponse,
+  tx: Partial<TransactionResponse>,
 ): Partial<TransactionsEntity> => {
   return {
     type: tx.type,

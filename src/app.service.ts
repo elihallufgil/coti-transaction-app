@@ -3,12 +3,18 @@ import {
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { HDNodeWallet, TransactionResponse, Wallet } from 'ethers';
+import {
+  ContractTransactionResponse,
+  HDNodeWallet,
+  TransactionResponse,
+  Wallet,
+} from 'ethers';
 import { ConfigService } from '@nestjs/config';
 import { CotiTransactionsEnvVariableNames } from './types/env-validation.type';
 import {
   createAccountEntity,
   createActivityEntity,
+  createTokenEntity,
   createTransactionEntity,
   getAccountByIndex,
   getAccountCount,
@@ -21,11 +27,13 @@ import { exec } from './utils/helpers';
 import { AppStateNames } from './types/app-state-names';
 import {
   AccountResponse,
+  CreateTokenRequest,
   OnboardAccountRequest,
   PickRandomAccountsToSendCotiRequest,
   PickRandomAccountsToSendCotiResponse,
   SendCotiFromAccountToAccountRequest,
   SendCotiFromFaucetRequest,
+  TokenResponse,
 } from './dtos/account.dto';
 import { EthersService } from './services/ethers.service';
 import { ActionEnum } from './enums/action.enum';
@@ -111,50 +119,107 @@ export class AppService {
     return new AccountResponse(newAccount);
   }
 
-  async createNewToken(params: { accountIndex: number }): Promise<any> {
+  async createNewToken(params: CreateTokenRequest): Promise<TokenResponse> {
     const manager = this.dataSource.manager;
-    await manager.transaction(async (transactionManager: EntityManager) => {
-      const [appStateError] = await exec(
-        getAppStateByName(
-          transactionManager,
-          AppStateNames.CREATE_TOKEN_LOCK,
-          true,
-        ),
-      );
-      if (appStateError) {
-        throw new InternalServerErrorException('Could not get wallet index');
-      }
-      const [actionError, action] = await exec(
-        getActionByType(transactionManager, ActionEnum.CreateToken),
-      );
-      if (actionError) {
-        throw new InternalServerErrorException('Could not get action');
-      }
-      const account = await getAccountByIndex(
-        transactionManager,
-        params.accountIndex,
-      );
-      // create new token transaction
-      // TODO: replace temp
-      const temp = '';
-      const [newActivityError] = await exec(
-        createActivityEntity(transactionManager, {
-          actionId: action.id,
-          data: `create new token ${temp} account address: ${account.address}`,
-        }),
-      );
-      if (newActivityError) {
-        throw new InternalServerErrorException(
-          'Failed to send deploy token transaction',
+    const {
+      isPrivate,
+      isBusiness,
+      tokenName,
+      tokenSymbol,
+      decimals,
+      accountIndex,
+    } = params;
+    const newTokenEntity = await manager.transaction(
+      async (transactionManager: EntityManager) => {
+        const [appStateError] = await exec(
+          getAppStateByName(
+            transactionManager,
+            AppStateNames.CREATE_TOKEN_LOCK,
+            true,
+          ),
         );
-      }
-      // if (newActivityError) {
-      //   throw new InternalServerErrorException('Failed to create activity');
-      // }
-      // return newWalletEntity;
-    });
+        if (appStateError) {
+          throw new InternalServerErrorException('Could not get wallet index');
+        }
+        const [actionError, action] = await exec(
+          getActionByType(
+            transactionManager,
+            isPrivate ? ActionEnum.CreatePrivateToken : ActionEnum.CreateToken,
+          ),
+        );
+        if (actionError) {
+          throw new InternalServerErrorException('Could not get action');
+        }
+        const account = await getAccountByIndex(
+          transactionManager,
+          accountIndex,
+        );
+        // create new token transaction
+        const token = await this.ethersService.deployToken({
+          tokenName,
+          tokenSymbol,
+          decimals,
+          isPrivate,
+          privateKey: account.privateKey,
+          owner: account.address,
+        });
 
-    return null;
+        const deploymentTransaction = token.deploymentTransaction();
+        const tokenAddress = await token.getAddress();
+        const [tokenEntityError, tokenEntity] = await exec(
+          createTokenEntity(transactionManager, {
+            address: tokenAddress,
+            decimals,
+            symbol: tokenSymbol,
+            name: tokenName,
+            isPrivate,
+            isBusiness,
+            ownerAccountId: account.id,
+          }),
+        );
+        if (tokenEntityError) {
+          throw new BadRequestException(
+            `Could not create db token address ${tokenAddress} `,
+          );
+        }
+        const deploymentTransactionWithTo: Partial<ContractTransactionResponse> =
+          {
+            ...deploymentTransaction,
+            to: tokenAddress,
+          };
+        const [transactionEntityError, transactionEntity] = await exec(
+          createTransactionEntity(
+            transactionManager,
+            deploymentTransactionWithTo,
+          ),
+        );
+        // fill the activity in the db
+        if (transactionEntityError) {
+          throw new BadRequestException(
+            `Send transaction without saving it or the activity txHash: ${deploymentTransaction.hash}`,
+          );
+        }
+
+        const [newActivityError] = await exec(
+          createActivityEntity(transactionManager, {
+            actionId: action.id,
+            transactionId: transactionEntity.id,
+            from: account.address,
+            to: tokenAddress,
+            tokenId: tokenEntity.id,
+            data: `create new ${isPrivate ? 'token' : 'private token'} ${tokenAddress} owned by account address: ${account.address}`,
+          }),
+        );
+        if (newActivityError) {
+          throw new InternalServerErrorException(
+            'Failed to send deploy token transaction',
+          );
+        }
+
+        return tokenEntity;
+      },
+    );
+    return new TokenResponse(newTokenEntity);
   }
 
   async sendCotiFromFaucet(
@@ -224,7 +289,7 @@ export class AppService {
     }
 
     const doubleCount = params.count * 2;
-    // we need it to be double so we can send and receive to unique indexes
+    // we need it to be double, so we can send and receive to unique indexes
     if (accountsCount < doubleCount) {
       throw new BadRequestException(
         `The requested ids count times 2 for send and receive ${doubleCount} is greater than the existing accounts count ${accountsCount}`,

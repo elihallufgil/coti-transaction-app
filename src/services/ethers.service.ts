@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   Block,
   Filter,
+  id,
   isAddress,
   JsonRpcProvider,
   Log,
@@ -14,7 +15,11 @@ import {
   WebSocketProvider,
 } from 'ethers';
 
-import { OnboardInfo, Wallet as CotiWallet } from '@coti-io/coti-ethers';
+import {
+  itUint,
+  OnboardInfo,
+  Wallet as CotiWallet,
+} from '@coti-io/coti-ethers';
 import {
   ERC20__factory,
   ERC20Token__factory,
@@ -267,5 +272,98 @@ export class EthersService {
       const tokenFactory = new PrivateERC20Token__factory(wallet);
       return tokenFactory.deploy(tokenName, tokenSymbol, decimals, owner);
     }
+  }
+
+  async mintToken(params: {
+    privateKey: string;
+    tokenAddress: string;
+    to: string;
+    weiAmount: string;
+    isPrivate: boolean;
+    networkAesKey?: string;
+  }) {
+    const {
+      to,
+      privateKey,
+      tokenAddress,
+      weiAmount,
+      isPrivate,
+      networkAesKey,
+    } = params;
+    if (isPrivate && !networkAesKey) {
+      throw new Error('To Mint private token you must provide Network AES key');
+    }
+    const wallet = new CotiWallet(privateKey, this.provider, {
+      aesKey: networkAesKey,
+    });
+
+    if (!isPrivate) {
+      const token = ERC20Token__factory.connect(tokenAddress, wallet);
+      return token.mint(to, weiAmount);
+    } else {
+      const privateToken = PrivateERC20Token__factory.connect(
+        tokenAddress,
+        wallet,
+      );
+      const signature = 'mint(address,(uint256,bytes))';
+      const selector = this.getSelectorFromSignature(signature);
+
+      const itAmount = await wallet.encryptValue(
+        weiAmount,
+        tokenAddress,
+        selector,
+      );
+      return privateToken.mint(to, itAmount as itUint);
+    }
+  }
+
+  async transferToken(params: {
+    privateKey: string;
+    tokenAddress: string;
+    to: string;
+    weiAmount: string;
+    isPrivate: boolean;
+    networkAesKey?: string;
+  }) {
+    const {
+      to,
+      privateKey,
+      tokenAddress,
+      weiAmount,
+      isPrivate,
+      networkAesKey,
+    } = params;
+    if (isPrivate && !networkAesKey) {
+      throw new Error('To Mint private token you must provide Network AES key');
+    }
+    const wallet = new CotiWallet(privateKey, this.provider, {
+      aesKey: networkAesKey,
+    });
+
+    if (!isPrivate) {
+      const token = ERC20Token__factory.connect(tokenAddress, wallet);
+      return token.transfer(to, weiAmount);
+    } else {
+      const privateToken = PrivateERC20Token__factory.connect(
+        tokenAddress,
+        wallet,
+      );
+      const signature = 'transfer(address,(uint256,bytes))';
+      const selector = this.getSelectorFromSignature(signature);
+
+      const itAmount = await wallet.encryptValue(
+        weiAmount,
+        tokenAddress,
+        selector,
+      );
+      return privateToken['transfer(address,(uint256,bytes))'](
+        to,
+        itAmount as itUint,
+      );
+    }
+  }
+
+  getSelectorFromSignature(functionSignature: string): string {
+    return id(functionSignature).slice(0, 10);
   }
 }

@@ -1,5 +1,13 @@
-import { AccountsEntity } from '../entities';
-import { IsInt, IsNumber, IsNumberString, Min } from 'class-validator';
+import { AccountsEntity, TokensEntity } from '../entities';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsNumberString,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class PickRandomAccountsToSendCotiRequest {
   @IsInt()
@@ -48,5 +56,47 @@ export class AccountResponse {
     this.address = accountEntity.address;
     this.createTime = accountEntity.createTime;
     this.updateTime = accountEntity.updateTime;
+  }
+}
+
+export class CreateTokenRequest {
+  @IsNumber()
+  accountIndex: number;
+  @IsNotEmpty()
+  @IsString()
+  tokenName: string;
+  @IsNotEmpty()
+  @IsString()
+  tokenSymbol: string;
+  @IsNumber()
+  decimals: number;
+  @IsBoolean()
+  isPrivate: boolean;
+  @IsBoolean()
+  isBusiness: boolean;
+}
+
+export class TokenResponse {
+  id: number;
+  ownerAccountId: number;
+  address: string;
+  name: string;
+  symbol: string;
+  decimals: number;
+  isBusiness: boolean;
+  isPrivate: boolean;
+  createTime: Date;
+  updateTime: Date;
+  constructor(tokenEntity: TokensEntity) {
+    this.id = tokenEntity.id;
+    this.ownerAccountId = tokenEntity.ownerAccountId;
+    this.address = tokenEntity.address;
+    this.name = tokenEntity.name;
+    this.symbol = tokenEntity.symbol;
+    this.decimals = tokenEntity.decimals;
+    this.isBusiness = tokenEntity.isBusiness;
+    this.isPrivate = tokenEntity.isPrivate;
+    this.createTime = tokenEntity.createTime;
+    this.updateTime = tokenEntity.updateTime;
   }
 }

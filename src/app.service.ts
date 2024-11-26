@@ -636,17 +636,28 @@ export class AppService {
         `Account with index: ${params.accountIndex} does not exists`,
       );
     }
-    let balance;
+    let balance = '';
     if (token.isPrivate) {
-      balance = await this.ethersService.getPrivateErc20Balance(
+      const encryptedBalance = await this.ethersService.getPrivateErc20Balance(
         token.address,
         account.address,
       );
+      try {
+        const decryptedBalance = await this.ethersService.decryptPrivateBalance(
+          account.privateKey,
+          account.networkAesKey,
+          encryptedBalance,
+        );
+        balance = decryptedBalance.toString();
+      } catch (error) {
+        balance = '*******';
+      }
     } else {
-      balance = await this.ethersService.getErc20Balance(
+      const balanceBigint = await this.ethersService.getErc20Balance(
         token.address,
         account.address,
       );
+      balance = balanceBigint.toString();
     }
 
     return new TokenBalanceResponse(account, token, balance.toString());

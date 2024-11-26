@@ -151,6 +151,18 @@ export class EthersService {
     return privateERC20['balanceOf(address)'](address);
   }
 
+  async decryptPrivateBalance(
+    privateKey: string,
+    networkAesKey: string,
+    encryptedBalance: bigint,
+  ) {
+    if (encryptedBalance === 0n) return encryptedBalance;
+    const wallet = new CotiWallet(privateKey, this.provider, {
+      aesKey: networkAesKey,
+    });
+    return wallet.decryptValue(encryptedBalance);
+  }
+
   async sendTransaction(transaction: Transaction): Promise<string> {
     const serializedTransaction = '0x' + transaction.serialized;
     return (await this.provider.broadcastTransaction(serializedTransaction))
@@ -305,11 +317,15 @@ export class EthersService {
         tokenAddress,
         wallet,
       );
-      const signature = 'mint(address,(uint256,bytes))';
-      const selector = this.getSelectorFromSignature(signature);
+      const privateTokenInterface =
+        PrivateERC20Token__factory.createInterface();
+      const signature = 'mint';
+      const selector = this.getSelectorFromSignature(
+        privateTokenInterface.getFunction(signature).format('sighash'),
+      );
 
       const itAmount = await wallet.encryptValue(
-        weiAmount,
+        BigInt(weiAmount),
         tokenAddress,
         selector,
       );
@@ -348,11 +364,15 @@ export class EthersService {
         tokenAddress,
         wallet,
       );
+      const privateTokenInterface =
+        PrivateERC20Token__factory.createInterface();
       const signature = 'transfer(address,(uint256,bytes))';
-      const selector = this.getSelectorFromSignature(signature);
+      const selector = this.getSelectorFromSignature(
+        privateTokenInterface.getFunction(signature).format('sighash'),
+      );
 
       const itAmount = await wallet.encryptValue(
-        weiAmount,
+        BigInt(weiAmount),
         tokenAddress,
         selector,
       );

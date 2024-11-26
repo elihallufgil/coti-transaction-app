@@ -124,3 +124,27 @@ export class TransferTokenToAccountRequest {
   @IsNumberString()
   tokenAmountInWei: string;
 }
+
+export class GetTokenBalanceRequest {
+  @Min(0)
+  @IsNumber()
+  tokenId: number;
+  @Min(0)
+  @IsNumber()
+  accountIndex: number;
+}
+
+export class TokenBalanceResponse {
+  account: AccountResponse;
+  token: TokenResponse;
+  balance: string;
+  constructor(
+    accountEntity: AccountsEntity,
+    tokenEntity: TokensEntity,
+    balance: string,
+  ) {
+    this.account = new AccountResponse(accountEntity);
+    this.token = new TokenResponse(tokenEntity);
+    this.balance = balance;
+  }
+}

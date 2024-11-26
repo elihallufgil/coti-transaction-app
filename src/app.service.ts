@@ -30,12 +30,14 @@ import { AppStateNames } from './types/app-state-names';
 import {
   AccountResponse,
   CreateTokenRequest,
+  GetTokenBalanceRequest,
   MintTokenToAccountRequest,
   OnboardAccountRequest,
   PickRandomAccountsToSendCotiRequest,
   PickRandomAccountsToSendCotiResponse,
   SendCotiFromAccountToAccountRequest,
   SendCotiFromFaucetRequest,
+  TokenBalanceResponse,
   TokenResponse,
   TransferTokenToAccountRequest,
 } from './dtos/account.dto';
@@ -605,5 +607,48 @@ export class AppService {
         return tx;
       },
     );
+  }
+
+  async getTokenBalance(
+    params: GetTokenBalanceRequest,
+  ): Promise<TokenBalanceResponse> {
+    const manager = this.dataSource.manager;
+
+    const [tokenError, token] = await exec(getToken(manager, params.tokenId));
+    if (tokenError) {
+      throw new InternalServerErrorException('Failed to get token');
+    }
+    if (!token) {
+      throw new BadRequestException(
+        `Token with id: ${params.tokenId} does not exists`,
+      );
+    }
+
+    const [accountsError, account] = await exec(
+      getAccountByIndex(manager, params.accountIndex),
+    );
+    if (accountsError) {
+      throw new InternalServerErrorException('Failed to get from account');
+    }
+
+    if (!account) {
+      throw new InternalServerErrorException(
+        `Account with index: ${params.accountIndex} does not exists`,
+      );
+    }
+    let balance;
+    if (token.isPrivate) {
+      balance = await this.ethersService.getPrivateErc20Balance(
+        token.address,
+        account.address,
+      );
+    } else {
+      balance = await this.ethersService.getErc20Balance(
+        token.address,
+        account.address,
+      );
+    }
+
+    return new TokenBalanceResponse(account, token, balance.toString());
   }
 }

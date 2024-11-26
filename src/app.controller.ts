@@ -3,12 +3,14 @@ import { AppService } from './app.service';
 import {
   AccountResponse,
   CreateTokenRequest,
+  GetTokenBalanceRequest,
   MintTokenToAccountRequest,
   OnboardAccountRequest,
   PickRandomAccountsToSendCotiRequest,
   PickRandomAccountsToSendCotiResponse,
   SendCotiFromAccountToAccountRequest,
   SendCotiFromFaucetRequest,
+  TokenBalanceResponse,
   TokenResponse,
   TransferTokenToAccountRequest,
 } from './dtos/account.dto';
@@ -68,10 +70,17 @@ export class AppController {
     return this.appService.pickRandomAccountsToSendCoti(body);
   }
 
-  @Post('sendFromAccountToAccount')
+  @Post('send-from-account-to-account')
   async sendCotiFromAccountToAccount(
     @Body() body: SendCotiFromAccountToAccountRequest,
   ): Promise<TransactionResponse> {
     return this.appService.sendCotiFromAccountToAccount(body);
+  }
+
+  @Post('get-token-balance')
+  async getTokenBalance(
+    @Body() body: GetTokenBalanceRequest,
+  ): Promise<TokenBalanceResponse> {
+    return this.appService.getTokenBalance(body);
   }
 }

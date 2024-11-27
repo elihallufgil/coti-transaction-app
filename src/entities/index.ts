@@ -6,3 +6,4 @@ export * from './activities.entity';
 export * from './app-states.entity';
 export * from './actions.entity';
 export * from './transactions.entity';
+export * from './tokens-to-generate.entity';

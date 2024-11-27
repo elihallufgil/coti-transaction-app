@@ -8,6 +8,7 @@ import {
   TransactionsEntity,
   NetworksEntity,
   TokensEntity,
+  TokensToGenerateEntity,
 } from '../entities';
 
 export function getTypeOrmModule() {
@@ -30,6 +31,7 @@ export function getTypeOrmModule() {
         NetworksEntity,
         TokensEntity,
         TransactionsEntity,
+        TokensToGenerateEntity,
       ],
       connectTimeout: 60 * 60 * 1000,
       timezone: 'Z',

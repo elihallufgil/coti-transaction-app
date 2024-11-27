@@ -15,6 +15,7 @@ import {
   TransferTokenToAccountRequest,
 } from './dtos/account.dto';
 import { TransactionResponse } from 'ethers';
+import { InsertResult } from 'typeorm';
 
 @Controller()
 export class AppController {
@@ -23,6 +24,11 @@ export class AppController {
   @Get()
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  @Post('insert-tokens-to-generate')
+  async insertTokensToGenerate(): Promise<InsertResult> {
+    return this.appService.insertTokensToGenerate();
   }
 
   @Post('create-account')

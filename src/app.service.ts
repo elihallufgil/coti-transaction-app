@@ -24,7 +24,7 @@ import {
   getToken,
   getTokenWithOwnerAccount,
 } from './entities';
-import { DataSource, EntityManager } from 'typeorm';
+import { DataSource, EntityManager, InsertResult } from 'typeorm';
 import { exec } from './utils/helpers';
 import { AppStateNames } from './types/app-state-names';
 import {
@@ -43,6 +43,8 @@ import {
 } from './dtos/account.dto';
 import { EthersService } from './services/ethers.service';
 import { ActionEnum } from './enums/action.enum';
+import { TokensToGenerate } from './configs/tokens-to-generate';
+import { insertManyTokensToGenerate } from './entities/tokens-to-generate.entity';
 
 @Injectable()
 export class AppService {
@@ -53,6 +55,12 @@ export class AppService {
   ) {}
   getHello(): string {
     return 'Hello World!';
+  }
+
+  async insertTokensToGenerate(): Promise<InsertResult> {
+    const manager = this.dataSource.manager;
+    const tokensToGenerate = TokensToGenerate;
+    return insertManyTokensToGenerate(manager, tokensToGenerate);
   }
 
   async createAccount(): Promise<AccountResponse> {

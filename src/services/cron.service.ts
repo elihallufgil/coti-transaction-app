@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DataSource, EntityManager } from 'typeorm';
+import {
+  DataSource,
+  EntityManager,
+  FindManyOptions,
+  FindOptionsWhere,
+} from 'typeorm';
 import {
   AccountOnboard__factory,
   ERC20__factory,
@@ -9,11 +14,14 @@ import {
 import { EthersService } from './ethers.service';
 import {
   ActionsEntity,
+  findTokens,
   getAccountsByIndexes,
   getAccountsToOnboard,
   getAllActions,
   getLastHourActivityPerAction,
+  getTokensCount,
   getTransactionWithStatusNull,
+  TokensEntity,
 } from '../entities';
 import { formatEther, TransactionReceipt } from 'ethers';
 import { ActionEnum } from '../enums/action.enum';
@@ -131,6 +139,12 @@ export class CronService {
         case ActionEnum.SendCotiFromFaucet:
           actionPromises.push(this.handleSendCotiFromFaucet(action));
           break;
+        case ActionEnum.MintPrivateToken:
+          actionPromises.push(this.handleMintToken(action));
+          break;
+        case ActionEnum.MintToken:
+          actionPromises.push(this.handleMintToken(action));
+          break;
       }
     }
 
@@ -241,5 +255,48 @@ export class CronService {
       );
     }
     await Promise.allSettled(sendingCotiPromises);
+  }
+
+  async handleMintToken(action: ActionsEntity) {
+    const manager = this.datasource.manager;
+    const randomRange = action.randomRange;
+    const activityCount = Math.round(Math.random() * randomRange);
+    const isPrivate = action.type === ActionEnum.MintPrivateToken;
+    this.logger.log(
+      `[runActivities][handleMintToken][${isPrivate ? 'private' : 'not private'}] activityCount/randomRange ${activityCount}/${randomRange}`,
+    );
+    if (activityCount === 0) return;
+    const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
+      count: activityCount,
+    });
+    const findOptions: FindOptionsWhere<TokensEntity> = { isPrivate };
+    // get activity count tokens
+    const tokensCount = await getTokensCount(manager, findOptions);
+    if (tokensCount === 0) return;
+    const randomSkip =
+      activityCount >= tokensCount
+        ? 0
+        : Math.round(Math.random() * (tokensCount - activityCount));
+    const findManyOptions: FindManyOptions<TokensEntity> = {
+      where: findOptions,
+      skip: randomSkip,
+    };
+    const tokens = await findTokens(manager, findManyOptions);
+    // send for each token
+    const mintTokenPromises = [];
+    for (const token of tokens) {
+      const toIndex = accountIndexesRes.accountsIndexes.pop();
+      const mintAmount =
+        BigInt(Math.round(Math.random() * 1000)) *
+        10n ** BigInt(token.decimals);
+      mintTokenPromises.push(
+        this.appService.mintToken({
+          tokenId: token.id,
+          toIndex,
+          tokenAmountInWei: mintAmount.toString(),
+        }),
+      );
+    }
+    await Promise.allSettled(mintTokenPromises);
   }
 }

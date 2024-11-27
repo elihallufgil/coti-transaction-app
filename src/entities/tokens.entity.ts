@@ -1,7 +1,16 @@
 import { BaseEntity } from './base.entity';
-import { Column, Entity, EntityManager, ManyToOne } from 'typeorm';
+import {
+  Column,
+  Entity,
+  EntityManager,
+  FindManyOptions,
+  FindOptionsWhere,
+  ManyToOne,
+} from 'typeorm';
 import { TableNames } from './table-names';
 import { AccountsEntity } from './accounts.entity';
+import { ActionsEntity } from './actions.entity';
+import { ActionEnum } from '../enums/action.enum';
 
 @Entity(TableNames.TOKENS)
 export class TokensEntity extends BaseEntity {
@@ -55,4 +64,34 @@ export const getToken = async (
   return manager.findOne(TokensEntity, {
     where: { id: tokenId },
   });
+};
+
+export const getTokensIds = async (
+  manager: EntityManager,
+  where: FindOptionsWhere<TokensEntity>,
+  skip: number,
+): Promise<number[]> => {
+  const res = await manager
+    .getRepository(TokensEntity)
+    .createQueryBuilder('tokens')
+    .select('tokens.id', 'id')
+    .where(where)
+    .skip(skip)
+    .getRawMany<{ id: number }>();
+
+  return res.map((x) => x.id);
+};
+
+export const getTokensCount = async (
+  manager: EntityManager,
+  params: FindOptionsWhere<TokensEntity>,
+): Promise<number> => {
+  return manager.count(TokensEntity, { where: params });
+};
+
+export const findTokens = async (
+  manager: EntityManager,
+  options: FindManyOptions<TokensEntity>,
+): Promise<TokensEntity[]> => {
+  return manager.find(TokensEntity, options);
 };

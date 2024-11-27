@@ -15,6 +15,8 @@ import { EthersService } from './ethers.service';
 import {
   ActionsEntity,
   findTokens,
+  getAccountIndexesThatReceiveToken,
+  getAccountsByAddresses,
   getAccountsByIndexes,
   getAccountsToOnboard,
   getAllActions,
@@ -144,6 +146,13 @@ export class CronService {
           break;
         case ActionEnum.MintToken:
           actionPromises.push(this.handleMintToken(action));
+          break;
+
+        case ActionEnum.TransferPrivateToken:
+          actionPromises.push(this.handleTransferToken(action));
+          break;
+        case ActionEnum.TransferToken:
+          actionPromises.push(this.handleTransferToken(action));
           break;
       }
     }
@@ -298,5 +307,80 @@ export class CronService {
       );
     }
     await Promise.allSettled(mintTokenPromises);
+  }
+
+  async handleTransferToken(action: ActionsEntity) {
+    const manager = this.datasource.manager;
+    const randomRange = action.randomRange;
+    const activityCount = Math.round(Math.random() * randomRange);
+    const isPrivate = action.type === ActionEnum.TransferPrivateToken;
+    this.logger.log(
+      `[runActivities][handleTransferToken][${isPrivate ? 'private' : 'not private'}] activityCount/randomRange ${activityCount}/${randomRange}`,
+    );
+    if (activityCount === 0) return;
+    const findOptions: FindOptionsWhere<TokensEntity> = { isPrivate };
+    // get activity count tokens
+    const tokensCount = await getTokensCount(manager, findOptions);
+    if (tokensCount === 0) return;
+    const randomSkip =
+      activityCount >= tokensCount
+        ? 0
+        : Math.round(Math.random() * (tokensCount - activityCount));
+    const findManyOptions: FindManyOptions<TokensEntity> = {
+      where: findOptions,
+      skip: randomSkip,
+    };
+    const tokens = await findTokens(manager, findManyOptions);
+    // send for each token
+    const mintTokenPromises = [];
+    for (const token of tokens) {
+      mintTokenPromises.push(this.sendTokenWrapper(token));
+    }
+    await Promise.allSettled(mintTokenPromises);
+  }
+
+  async sendTokenWrapper(token: TokensEntity) {
+    const manager = this.datasource.manager;
+    // pick 1 account with affiliation to the token
+    const accountsIndexThatReceivedToken =
+      await getAccountIndexesThatReceiveToken(manager, token.id);
+    const randomIndex =
+      accountsIndexThatReceivedToken[
+        Math.round(Math.random() * (accountsIndexThatReceivedToken.length - 1))
+      ];
+    // pick 1 random account
+    const accountToIndexRes = await this.appService.pickRandomAccountsToRefill({
+      count: 1,
+      banIndexList: [randomIndex],
+    });
+    const accounts = await getAccountsByIndexes(manager, [
+      randomIndex,
+      accountToIndexRes.accountsIndexes[0],
+    ]);
+
+    const fromAccount = accounts.find((x) => x.index === randomIndex);
+    const toAccount = accounts.find((x) => x.index !== randomIndex);
+    // get balances
+    let bigintBalance = await this.ethersService.getErc20Balance(
+      token.address,
+      fromAccount.address,
+      token.isPrivate,
+    );
+    if (token.isPrivate) {
+      bigintBalance = await this.ethersService.decryptPrivateBalance(
+        fromAccount.privateKey,
+        fromAccount.networkAesKey,
+        bigintBalance,
+      );
+    }
+
+    const balanceToSend = bigintBalance / 10n;
+
+    return this.appService.transferToken({
+      tokenId: token.id,
+      fromIndex: fromAccount.index,
+      toIndex: toAccount.index,
+      tokenAmountInWei: balanceToSend.toString(),
+    });
   }
 }

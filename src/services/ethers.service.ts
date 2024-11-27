@@ -16,6 +16,7 @@ import {
 } from 'ethers';
 
 import {
+  ctUint,
   itUint,
   OnboardInfo,
   Wallet as CotiWallet,
@@ -135,32 +136,47 @@ export class EthersService {
   async getErc20Balance(
     contractAddress: string,
     address: string,
+    isPrivate?: boolean,
   ): Promise<bigint> {
+    if (isPrivate) {
+      const privateERC20 = PrivateERC20Token__factory.connect(
+        contractAddress,
+        this.provider,
+      );
+      return privateERC20['balanceOf(address)'](address);
+    }
     const erc20 = ERC20__factory.connect(contractAddress, this.provider);
     return erc20['balanceOf(address)'](address);
   }
 
-  async getPrivateErc20Balance(
+  async getErc20Balances(
     contractAddress: string,
-    address: string,
-  ): Promise<bigint> {
-    const privateERC20 = PrivateERC20Token__factory.connect(
-      contractAddress,
-      this.provider,
-    );
-    return privateERC20['balanceOf(address)'](address);
+    addresses: string[],
+    isPrivate?: boolean,
+  ): Promise<Map<string, bigint>> {
+    const balanceMap = new Map<string, bigint>();
+    const promises = [];
+    for (const address of addresses) {
+      promises.push(
+        this.getErc20Balance(contractAddress, address, isPrivate).then((b) =>
+          balanceMap.set(address, b),
+        ),
+      );
+    }
+    await Promise.all(promises);
+    return balanceMap;
   }
 
   async decryptPrivateBalance(
     privateKey: string,
     networkAesKey: string,
     encryptedBalance: bigint,
-  ) {
+  ): Promise<bigint> {
     if (encryptedBalance === 0n) return encryptedBalance;
     const wallet = new CotiWallet(privateKey, this.provider, {
       aesKey: networkAesKey,
     });
-    return wallet.decryptValue(encryptedBalance);
+    return wallet.decryptValue(encryptedBalance) as Promise<bigint>;
   }
 
   async sendTransaction(transaction: Transaction): Promise<string> {

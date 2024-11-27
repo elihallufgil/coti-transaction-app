@@ -3,6 +3,7 @@ import { Column, Entity, EntityManager, JoinColumn, ManyToOne } from 'typeorm';
 import { TableNames } from './table-names';
 import { ActionsEntity } from './actions.entity';
 import { ActionEnum } from '../enums/action.enum';
+import { AccountsEntity } from './accounts.entity';
 
 @Entity(TableNames.ACTIVITIES)
 export class ActivitiesEntity extends BaseEntity {
@@ -27,6 +28,10 @@ export class ActivitiesEntity extends BaseEntity {
   @ManyToOne(() => ActionsEntity)
   @JoinColumn({ name: 'actionId' })
   action: ActionsEntity;
+
+  @ManyToOne(() => AccountsEntity)
+  @JoinColumn({ name: 'to' })
+  toAccount: AccountsEntity;
 }
 
 export const createActivityEntity = async (
@@ -56,4 +61,22 @@ export const getLastHourActivityPerAction = async (
     actionToActivityCountMap.set(rec.actionType, rec.activityCount);
   }
   return actionToActivityCountMap;
+};
+
+export const getAccountIndexesThatReceiveToken = async (
+  manager: EntityManager,
+  tokenId: number,
+  isPrivate?: boolean,
+): Promise<number[]> => {
+  const activitiesRepository = manager.getRepository(ActivitiesEntity);
+  const res = await activitiesRepository
+    .createQueryBuilder('activities')
+    .leftJoin(AccountsEntity, 'accounts', 'accounts.address = activities.to')
+    .select('accounts.index', 'accountIndex')
+    .where('activities.tokenId = :tokenId', { tokenId })
+    .andWhere('activities.to IS NOT NULL')
+    .andWhere(`${isPrivate ? 'accounts.networkAesKey IS NOT NULL' : '1=1'}`)
+    .groupBy('accounts.index')
+    .getRawMany<{ accountIndex: number }>();
+  return res.map((x) => x.accountIndex);
 };

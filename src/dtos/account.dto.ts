@@ -1,10 +1,12 @@
 import { AccountsEntity, TokensEntity } from '../entities';
 import {
+  IsArray,
   IsBoolean,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsNumberString,
+  IsOptional,
   IsString,
   Min,
 } from 'class-validator';
@@ -12,6 +14,11 @@ import {
 export class PickRandomAccountsToSendCotiRequest {
   @IsInt()
   count: number;
+
+  @IsArray()
+  @IsInt({ each: true })
+  @IsOptional()
+  banIndexList?: number[];
 }
 
 export class PickRandomAccountsToSendCotiResponse {

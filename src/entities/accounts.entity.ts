@@ -1,9 +1,8 @@
 import { BaseEntity } from './base.entity';
 import { Column, Entity, EntityManager, In, IsNull, OneToMany } from 'typeorm';
 import { TableNames } from './table-names';
-import { exec } from '../utils/helpers';
-import { AppStatesEntity } from './app-states.entity';
 import { TokensEntity } from './tokens.entity';
+import { ActivitiesEntity } from './activities.entity';
 
 @Entity(TableNames.ACCOUNTS)
 export class AccountsEntity extends BaseEntity {
@@ -21,6 +20,9 @@ export class AccountsEntity extends BaseEntity {
 
   @OneToMany(() => TokensEntity, (token) => token.ownerAccount)
   tokens: TokensEntity[];
+
+  @OneToMany(() => ActivitiesEntity, (activity) => activity.toAccount)
+  toActivities: ActivitiesEntity[];
 }
 
 export const createAccountEntity = async (
@@ -42,6 +44,13 @@ export const getAccountsByIndexes = async (
   indexes: number[],
 ): Promise<AccountsEntity[]> => {
   return manager.find(AccountsEntity, { where: { index: In(indexes) } });
+};
+
+export const getAccountsByAddresses = async (
+  manager: EntityManager,
+  addresses: string[],
+): Promise<AccountsEntity[]> => {
+  return manager.find(AccountsEntity, { where: { address: In(addresses) } });
 };
 
 export const getAccountByIndex = async (

@@ -331,7 +331,11 @@ export class AppService {
     while (indexes.length < params.count) {
       const random = Math.random();
       const index = Math.round(random * accountsCount);
-      if (indexes.includes(index)) continue;
+      if (
+        indexes.includes(index) ||
+        (params.banIndexList && params.banIndexList.includes(index))
+      )
+        continue;
       indexes.push(index);
     }
     return { accountsIndexes: indexes };
@@ -636,28 +640,25 @@ export class AppService {
         `Account with index: ${params.accountIndex} does not exists`,
       );
     }
+    const bigintBalance = await this.ethersService.getErc20Balance(
+      token.address,
+      account.address,
+      token.isPrivate,
+    );
     let balance = '';
     if (token.isPrivate) {
-      const encryptedBalance = await this.ethersService.getPrivateErc20Balance(
-        token.address,
-        account.address,
-      );
       try {
         const decryptedBalance = await this.ethersService.decryptPrivateBalance(
           account.privateKey,
           account.networkAesKey,
-          encryptedBalance,
+          bigintBalance,
         );
         balance = decryptedBalance.toString();
       } catch (error) {
         balance = '*******';
       }
     } else {
-      const balanceBigint = await this.ethersService.getErc20Balance(
-        token.address,
-        account.address,
-      );
-      balance = balanceBigint.toString();
+      balance = bigintBalance.toString();
     }
 
     return new TokenBalanceResponse(account, token, balance.toString());

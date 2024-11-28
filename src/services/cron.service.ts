@@ -6,17 +6,11 @@ import {
   FindManyOptions,
   FindOptionsWhere,
 } from 'typeorm';
-import {
-  AccountOnboard__factory,
-  ERC20__factory,
-  PrivateERC20__factory,
-} from '../typechain-types';
 import { EthersService } from './ethers.service';
 import {
   ActionsEntity,
   findTokens,
   getAccountIndexesThatReceiveToken,
-  getAccountsByAddresses,
   getAccountsByIndexes,
   getAccountsToOnboard,
   getAllActions,
@@ -29,20 +23,9 @@ import { formatEther, TransactionReceipt } from 'ethers';
 import { ActionEnum } from '../enums/action.enum';
 import { AppService } from '../app.service';
 
-// import { PrivateERC721__factory } from 'coti-contracts/typechain-types/factories/contracts/token/PrivateERC721';
-
 @Injectable()
 export class CronService {
   private readonly logger = new Logger(CronService.name);
-  private readonly privateErc20Interface =
-    PrivateERC20__factory.createInterface();
-  private readonly erc20Interface = ERC20__factory.createInterface();
-  private readonly accountOnboardInterface =
-    AccountOnboard__factory.createInterface();
-  private readonly maxSyncBlocks: number;
-  private readonly maxIndexBlocks: number;
-  private readonly chainId: number;
-  private readonly onBoardContractAddress: string;
 
   constructor(
     private readonly datasource: DataSource,
@@ -154,6 +137,12 @@ export class CronService {
         case ActionEnum.TransferToken:
           actionPromises.push(this.handleTransferToken(action));
           break;
+        case ActionEnum.CreateToken:
+          actionPromises.push(this.handleCreateToken(action));
+          break;
+        case ActionEnum.CreatePrivateToken:
+          actionPromises.push(this.handleCreateToken(action));
+          break;
       }
     }
 
@@ -264,6 +253,42 @@ export class CronService {
       );
     }
     await Promise.allSettled(sendingCotiPromises);
+  }
+
+  async handleCreateToken(action: ActionsEntity) {
+    const randomRange = action.randomRange;
+    const activityCount = Math.round(Math.random() * randomRange);
+    const isPrivate = action.type === ActionEnum.CreatePrivateToken;
+    this.logger.log(
+      `[runActivities][handleCreateToken][${isPrivate ? 'private' : 'not private'}] activityCount/randomRange ${activityCount}/${randomRange}`,
+    );
+    if (activityCount === 0) return;
+    const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
+      count: activityCount,
+    });
+
+    const createTokenPromises = [];
+    for (const accountIndex of accountIndexesRes.accountsIndexes) {
+      createTokenPromises.push(
+        this.createTokenWrapper(accountIndex, isPrivate),
+      );
+    }
+    await Promise.allSettled(createTokenPromises);
+  }
+
+  async createTokenWrapper(accountIndex: number, isPrivate: boolean) {
+    const refilTx = await this.appService.sendCotiFromFaucet({
+      toIndex: accountIndex,
+      amountInCoti: '5',
+    });
+    await refilTx.wait();
+
+    this.appService.createNewToken({
+      accountIndex,
+      isPrivate,
+      isBusiness: false,
+      decimals: 9,
+    });
   }
 
   async handleMintToken(action: ActionsEntity) {

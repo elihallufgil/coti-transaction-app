@@ -16,7 +16,6 @@ import {
 } from 'ethers';
 
 import {
-  ctUint,
   itUint,
   OnboardInfo,
   Wallet as CotiWallet,

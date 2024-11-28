@@ -22,6 +22,7 @@ import {
   getActionByType,
   getAppStateByName,
   getToken,
+  getTokenToGenerate,
   getTokenWithOwnerAccount,
 } from './entities';
 import { DataSource, EntityManager, InsertResult } from 'typeorm';
@@ -135,14 +136,10 @@ export class AppService {
 
   async createNewToken(params: CreateTokenRequest): Promise<TokenResponse> {
     const manager = this.dataSource.manager;
-    const {
-      isPrivate,
-      isBusiness,
-      tokenName,
-      tokenSymbol,
-      decimals,
-      accountIndex,
-    } = params;
+    const { isPrivate, isBusiness, name, symbol, decimals, accountIndex } =
+      params;
+    let nameToUse = name;
+    let symbolToUse = symbol;
     const newTokenEntity = await manager.transaction(
       async (transactionManager: EntityManager) => {
         const [appStateError] = await exec(
@@ -154,6 +151,22 @@ export class AppService {
         );
         if (appStateError) {
           throw new InternalServerErrorException('Could not get wallet index');
+        }
+        if (!nameToUse || !symbolToUse) {
+          const tokenToGenerate = await getTokenToGenerate(transactionManager);
+          if (!tokenToGenerate)
+            throw new BadRequestException(
+              `No more name or symbol suggestions, please provide name and symbol`,
+            );
+          if (isPrivate) {
+            nameToUse = `Private ${tokenToGenerate.name}`;
+            symbolToUse = `P${tokenToGenerate.symbol}`;
+          } else {
+            nameToUse = tokenToGenerate.name;
+            symbolToUse = tokenToGenerate.symbol;
+          }
+          tokenToGenerate.isGenerated = true;
+          await transactionManager.save(tokenToGenerate);
         }
         const [actionError, action] = await exec(
           getActionByType(
@@ -170,8 +183,8 @@ export class AppService {
         );
         // create new token transaction
         const token = await this.ethersService.deployToken({
-          tokenName,
-          tokenSymbol,
+          tokenName: nameToUse,
+          tokenSymbol: symbolToUse,
           decimals,
           isPrivate,
           privateKey: account.privateKey,
@@ -184,8 +197,8 @@ export class AppService {
           createTokenEntity(transactionManager, {
             address: tokenAddress,
             decimals,
-            symbol: tokenSymbol,
-            name: tokenName,
+            symbol: symbolToUse,
+            name: nameToUse,
             isPrivate,
             isBusiness,
             ownerAccountId: account.id,

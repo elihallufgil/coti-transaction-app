@@ -69,12 +69,12 @@ export class AccountResponse {
 export class CreateTokenRequest {
   @IsNumber()
   accountIndex: number;
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  tokenName: string;
-  @IsNotEmpty()
+  name?: string;
+  @IsOptional()
   @IsString()
-  tokenSymbol: string;
+  symbol?: string;
   @IsNumber()
   decimals: number;
   @IsBoolean()

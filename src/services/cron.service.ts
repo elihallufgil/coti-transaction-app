@@ -230,7 +230,12 @@ export class CronService {
       const sendingAccountBalance = balanceMap.get(sendingAccount.address);
       if (sendingAccountBalance === 0n) continue;
       // TODO: make it dynamic
-      const amount = formatEther((sendingAccountBalance / 10n).toString());
+      const balanceToSend = this.replaceLessSignificantDigits(
+        sendingAccountBalance / 10n,
+        9,
+      );
+      if (balanceToSend === 0n) return;
+      const amount = formatEther(balanceToSend).toString();
       sendingCotiPromises.push(
         this.appService.sendCotiFromAccountToAccount({
           fromIndex: sendingAccount.index,
@@ -433,7 +438,11 @@ export class CronService {
       );
     }
 
-    const balanceToSend = bigintBalance / 10n;
+    const balanceToSend = this.replaceLessSignificantDigits(
+      bigintBalance / 10n,
+      3,
+    );
+    if (balanceToSend === 0n) return;
 
     return this.appService.transferToken({
       tokenId: token.id,
@@ -441,5 +450,14 @@ export class CronService {
       toIndex: toAccount.index,
       tokenAmountInWei: balanceToSend.toString(),
     });
+  }
+
+  replaceLessSignificantDigits(value: bigint, x: number): bigint {
+    if (x < 0) {
+      throw new Error('The number of digits to replace must be non-negative.');
+    }
+
+    const factor = BigInt(10) ** BigInt(x); // Compute 10^x as a bigint
+    return (value / factor) * factor; // Remove and replace the less significant digits with 0
   }
 }

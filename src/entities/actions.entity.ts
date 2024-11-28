@@ -27,3 +27,9 @@ export const getAllActions = async (
 ): Promise<ActionsEntity[]> => {
   return manager.find(ActionsEntity);
 };
+
+export const getActions = async (
+  manager: EntityManager,
+): Promise<ActionsEntity[]> => {
+  return manager.find(ActionsEntity);
+};

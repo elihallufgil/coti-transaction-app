@@ -81,13 +81,13 @@ export class CronService {
         tx.blockNumber = receipt.blockNumber;
         tx.gasUsed = receipt.gasUsed.toString();
         tx.index = receipt.index;
+        if (receipt.gasPrice) tx.gasPrice = receipt.gasPrice.toString();
       }
       await transactionManager.save(transactionsEntities);
     });
   }
 
   async runActivities() {
-    // TODO: complete this function
     const manager = this.datasource.manager;
     const actions = await getAllActions(manager);
     const lastHourActivityPerActionMap =
@@ -124,6 +124,37 @@ export class CronService {
         case ActionEnum.SendCotiFromFaucet:
           actionPromises.push(this.handleSendCotiFromFaucet(action));
           break;
+      }
+    }
+
+    await Promise.allSettled(actionPromises);
+  }
+
+  async runSlowActivities() {
+    const manager = this.datasource.manager;
+    const actions = await getAllActions(manager);
+    const lastHourActivityPerActionMap =
+      await getLastHourActivityPerAction(manager);
+    const extendedActions: (ActionsEntity & {
+      lastHourActivityCount: number;
+    })[] = actions.map((x) => ({
+      ...x,
+      lastHourActivityCount: lastHourActivityPerActionMap.get(x.type) || 0,
+    }));
+
+    console.table(extendedActions, [
+      'type',
+      'randomRange',
+      'maxPerHour',
+      'lastHourActivityCount',
+    ]);
+    const filteredActions = extendedActions.filter(
+      (x) => x.randomRange > 0 && x.lastHourActivityCount < x.maxPerHour,
+    );
+    const actionPromises = [];
+    if (filteredActions.length === 0) return;
+    for (const action of filteredActions) {
+      switch (action.type) {
         case ActionEnum.MintPrivateToken:
           actionPromises.push(this.handleMintToken(action));
           break;
@@ -314,6 +345,7 @@ export class CronService {
     const findManyOptions: FindManyOptions<TokensEntity> = {
       where: findOptions,
       skip: randomSkip,
+      take: activityCount,
     };
     const tokens = await findTokens(manager, findManyOptions);
     // send for each token
@@ -354,6 +386,7 @@ export class CronService {
     const findManyOptions: FindManyOptions<TokensEntity> = {
       where: findOptions,
       skip: randomSkip,
+      take: activityCount,
     };
     const tokens = await findTokens(manager, findManyOptions);
     // send for each token
@@ -373,6 +406,7 @@ export class CronService {
       accountsIndexThatReceivedToken[
         Math.round(Math.random() * (accountsIndexThatReceivedToken.length - 1))
       ];
+    if (randomIndex === null) return;
     // pick 1 random account
     const accountToIndexRes = await this.appService.pickRandomAccountsToRefill({
       count: 1,

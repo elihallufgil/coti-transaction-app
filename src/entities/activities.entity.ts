@@ -4,6 +4,7 @@ import { TableNames } from './table-names';
 import { ActionsEntity } from './actions.entity';
 import { ActionEnum } from '../enums/action.enum';
 import { AccountsEntity } from './accounts.entity';
+import { Logger } from '@nestjs/common';
 
 @Entity(TableNames.ACTIVITIES)
 export class ActivitiesEntity extends BaseEntity {
@@ -30,7 +31,7 @@ export class ActivitiesEntity extends BaseEntity {
   action: ActionsEntity;
 
   @ManyToOne(() => AccountsEntity)
-  @JoinColumn({ name: 'to' })
+  @JoinColumn({ name: 'to', referencedColumnName: 'address' })
   toAccount: AccountsEntity;
 }
 
@@ -68,7 +69,18 @@ export const getAccountIndexesThatReceiveToken = async (
   tokenId: number,
   isPrivate?: boolean,
 ): Promise<number[]> => {
+  const logger = new Logger('getAccountIndexesThatReceiveToken');
   const activitiesRepository = manager.getRepository(ActivitiesEntity);
+  const query = activitiesRepository
+    .createQueryBuilder('activities')
+    .leftJoin(AccountsEntity, 'accounts', 'accounts.address = activities.to')
+    .select('accounts.index', 'accountIndex')
+    .where('activities.tokenId = :tokenId', { tokenId })
+    .andWhere('activities.to IS NOT NULL')
+    .andWhere(`${isPrivate ? 'accounts.networkAesKey IS NOT NULL' : '1=1'}`)
+    .groupBy('accounts.index')
+    .getQuery();
+  logger.warn(query);
   const res = await activitiesRepository
     .createQueryBuilder('activities')
     .leftJoin(AccountsEntity, 'accounts', 'accounts.address = activities.to')

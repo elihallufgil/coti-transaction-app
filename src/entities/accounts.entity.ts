@@ -1,8 +1,17 @@
 import { BaseEntity } from './base.entity';
-import { Column, Entity, EntityManager, In, IsNull, OneToMany } from 'typeorm';
+import {
+  Column,
+  Entity,
+  EntityManager,
+  In,
+  IsNull,
+  JoinColumn,
+  OneToMany,
+} from 'typeorm';
 import { TableNames } from './table-names';
 import { TokensEntity } from './tokens.entity';
 import { ActivitiesEntity } from './activities.entity';
+import { address } from 'hardhat/internal/core/config/config-validation';
 
 @Entity(TableNames.ACCOUNTS)
 export class AccountsEntity extends BaseEntity {
@@ -22,6 +31,7 @@ export class AccountsEntity extends BaseEntity {
   tokens: TokensEntity[];
 
   @OneToMany(() => ActivitiesEntity, (activity) => activity.toAccount)
+  @JoinColumn({ name: 'address', referencedColumnName: 'to' })
   toActivities: ActivitiesEntity[];
 }
 

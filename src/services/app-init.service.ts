@@ -149,6 +149,13 @@ export class AppInitService implements OnModuleInit {
     const runActivitiesEnabled = this.configService.get<boolean>(
       CotiTransactionsEnvVariableNames.RUN_ACTIVITIES_ENABLED,
     );
+
+    const runSlowActivitiesInterval = this.configService.get<number>(
+      CotiTransactionsEnvVariableNames.RUN_SLOW_ACTIVITIES_INTERVAL_IN_SECONDS,
+    );
+    const runSlowActivitiesEnabled = this.configService.get<boolean>(
+      CotiTransactionsEnvVariableNames.RUN_SLOW_ACTIVITIES_ENABLED,
+    );
     const checkTransactionCompleteInterval = this.configService.get<number>(
       CotiTransactionsEnvVariableNames.CHECK_TRANSACTION_COMPLETE_INTERVAL_IN_SECONDS,
     );
@@ -161,6 +168,13 @@ export class AppInitService implements OnModuleInit {
       this.cronService.runActivities.bind(this.cronService),
       runActivitiesInterval,
       runActivitiesEnabled,
+    );
+
+    this.runEveryXSeconds(
+      'RUN SLOW ACTIVITIES',
+      this.cronService.runSlowActivities.bind(this.cronService),
+      runSlowActivitiesInterval,
+      runSlowActivitiesEnabled,
     );
 
     this.runEveryXSeconds(

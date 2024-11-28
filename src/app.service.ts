@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import {
   ContractTransactionResponse,
@@ -49,6 +50,7 @@ import { insertManyTokensToGenerate } from './entities/tokens-to-generate.entity
 
 @Injectable()
 export class AppService {
+  logger = new Logger(AppService.name);
   constructor(
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
@@ -226,7 +228,6 @@ export class AppService {
             `Send transaction without saving it or the activity txHash: ${deploymentTransaction.hash}`,
           );
         }
-
         const [newActivityError] = await exec(
           createActivityEntity(transactionManager, {
             actionId: action.id,
@@ -234,7 +235,7 @@ export class AppService {
             from: account.address,
             to: tokenAddress,
             tokenId: tokenEntity.id,
-            data: `create new ${isPrivate ? 'token' : 'private token'} ${tokenAddress} owned by account address: ${account.address}`,
+            data: `create new ${isPrivate ? 'private token' : 'token'} ${tokenAddress} owned by account address: ${account.address}`,
           }),
         );
         if (newActivityError) {
@@ -542,7 +543,7 @@ export class AppService {
           createActivityEntity(transactionManager, {
             actionId: action.id,
             from: tx.from,
-            to: tx.to,
+            to: toAccount.address,
             transactionId: transactionEntity.id,
             tokenId: token.id,
             data: `Mint ${params.tokenAmountInWei} ${token.name} to: ${toAccount.address}`,
@@ -620,7 +621,7 @@ export class AppService {
           createActivityEntity(transactionManager, {
             actionId: action.id,
             from: tx.from,
-            to: tx.to,
+            to: toAccount.address,
             transactionId: transactionEntity.id,
             tokenId: token.id,
             data: `Transfer ${params.tokenAmountInWei} ${token.name} from: ${fromAccount.address} to: ${toAccount.address}`,

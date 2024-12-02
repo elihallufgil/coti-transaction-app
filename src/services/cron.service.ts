@@ -75,13 +75,14 @@ export class CronService {
               `[checkTransactionsComplete] timeout to handle receipt for txHash ${tx.hash}`,
             );
             tx.status = 2;
-          } else continue;
+          }
+        } else {
+          tx.status = receipt.status;
+          tx.blockNumber = receipt.blockNumber;
+          tx.gasUsed = receipt.gasUsed.toString();
+          tx.index = receipt.index;
+          if (receipt.gasPrice) tx.gasPrice = receipt.gasPrice.toString();
         }
-        tx.status = receipt.status;
-        tx.blockNumber = receipt.blockNumber;
-        tx.gasUsed = receipt.gasUsed.toString();
-        tx.index = receipt.index;
-        if (receipt.gasPrice) tx.gasPrice = receipt.gasPrice.toString();
       }
       await transactionManager.save(transactionsEntities);
     });
@@ -191,6 +192,7 @@ export class CronService {
       await this.appService.createAccount();
     }
   }
+
   async handleSendCoti(action: ActionsEntity) {
     const manager = this.datasource.manager;
     const randomRange = action.randomRange;

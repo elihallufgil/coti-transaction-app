@@ -51,11 +51,13 @@ import { insertManyTokensToGenerate } from './entities/tokens-to-generate.entity
 @Injectable()
 export class AppService {
   logger = new Logger(AppService.name);
+
   constructor(
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
     private readonly ethersService: EthersService,
   ) {}
+
   getHello(): string {
     return 'Hello World!';
   }
@@ -256,7 +258,11 @@ export class AppService {
     const manager = this.dataSource.manager;
     return manager.transaction(async (transactionManager: EntityManager) => {
       const [actionError, action] = await exec(
-        getActionByType(transactionManager, ActionEnum.SendCotiFromFaucet),
+        getActionByType(
+          transactionManager,
+          ActionEnum.SendCotiFromFaucet,
+          true,
+        ),
       );
       if (actionError) {
         throw new InternalServerErrorException('Could not get action');
@@ -353,10 +359,7 @@ export class AppService {
     while (indexes.length < params.count) {
       const random = Math.random();
       const index = Math.round(random * accountsCount);
-      if (
-        indexes.includes(index) ||
-        (params.banIndexList && params.banIndexList.includes(index))
-      )
+      if (indexes.includes(index) || params.banIndexList?.includes(index))
         continue;
       indexes.push(index);
     }

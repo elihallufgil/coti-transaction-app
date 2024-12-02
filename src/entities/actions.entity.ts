@@ -18,8 +18,16 @@ export class ActionsEntity extends BaseEntity {
 export const getActionByType = async (
   manager: EntityManager,
   type: ActionEnum,
+  lock = false,
 ): Promise<ActionsEntity> => {
-  return manager.findOne(ActionsEntity, { where: { type } });
+  const query = manager
+    .getRepository<ActionsEntity>(TableNames.ACTIONS)
+    .createQueryBuilder(TableNames.ACTIONS)
+    .where({ type });
+  if (lock) {
+    query.setLock('pessimistic_write');
+  }
+  return query.getOne();
 };
 
 export const getAllActions = async (

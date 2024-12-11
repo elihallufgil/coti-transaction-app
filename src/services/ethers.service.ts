@@ -10,6 +10,7 @@ import {
   Provider,
   Transaction,
   TransactionReceipt,
+  TransactionRequest,
   TransactionResponse,
   Wallet,
   WebSocketProvider,
@@ -193,12 +194,14 @@ export class EthersService {
    * @param privateKey - The private key of the sender's wallet.
    * @param recipientAddress - The Ethereum address of the recipient.
    * @param amountInEth - The amount of Ethereum to send (in ETH).
+   * @param nonce - override default nonce
    * @returns A promise that resolves to the transaction hash.
    */
   async sendEthereum(
     privateKey: string,
     recipientAddress: string,
     amountInEth: string,
+    nonce?: number,
   ): Promise<TransactionResponse> {
     try {
       // Create a wallet instance using the private key and connect to the provider
@@ -216,11 +219,16 @@ export class EthersService {
       if (fromBalance < amountInWei) {
         throw new Error('Not enough balance');
       }
-      // Create and send the transaction
-      return await wallet.sendTransaction({
+      const transactionConfig: TransactionRequest = {
         to: recipientAddress,
         value: amountInWei, // Amount in Wei
-      });
+      };
+      if (nonce || nonce === 0) {
+        transactionConfig.nonce = nonce;
+      }
+
+      // Create and send the transaction
+      return await wallet.sendTransaction(transactionConfig);
     } catch (error) {
       console.error('Error sending Ethereum:', error);
       throw error;
@@ -278,6 +286,9 @@ export class EthersService {
       console.error('Error fetching transaction response:', error);
       throw error;
     }
+  }
+  async getNextNonce(address: string): Promise<number> {
+    return this.provider.getTransactionCount(address, 'latest'); // Use 'latest' to get the next usable nonce
   }
 
   async deployToken(params: {

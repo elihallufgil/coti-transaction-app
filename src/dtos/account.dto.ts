@@ -21,6 +21,10 @@ export class PickRandomAccountsToSendCotiRequest {
   banIndexList?: number[];
 }
 
+export class GetFaucetWalletAddressResponse {
+  address: string;
+  nonce: number;
+}
 export class PickRandomAccountsToSendCotiResponse {
   accountsIndexes: number[];
 }

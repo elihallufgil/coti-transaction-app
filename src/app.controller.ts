@@ -3,6 +3,7 @@ import { AppService } from './app.service';
 import {
   AccountResponse,
   CreateTokenRequest,
+  GetFaucetWalletAddressResponse,
   GetTokenBalanceRequest,
   MintTokenToAccountRequest,
   OnboardAccountRequest,
@@ -74,6 +75,16 @@ export class AppController {
     @Body() body: PickRandomAccountsToSendCotiRequest,
   ): Promise<PickRandomAccountsToSendCotiResponse> {
     return this.appService.pickRandomAccountsToSendCoti(body);
+  }
+
+  @Get('faucet-wallet-address')
+  async getFaucetAddress(): Promise<GetFaucetWalletAddressResponse> {
+    return this.appService.getFaucetAddress();
+  }
+
+  @Get('change-faucet-address')
+  async changeFaucetAddress(): Promise<TransactionResponse> {
+    return this.appService.replaceFaucetAddress();
   }
 
   @Post('send-from-account-to-account')

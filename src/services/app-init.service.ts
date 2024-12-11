@@ -59,6 +59,18 @@ export class AppInitService implements OnModuleInit {
           }),
         );
       }
+      if (
+        !appStates.find(
+          (appState) => appState.name === AppStateNames.FAUCET_ACCOUNT_INDEX,
+        )
+      ) {
+        appStateArr.push(
+          manager.getRepository<AppStatesEntity>(TableNames.APP_STATES).create({
+            name: AppStateNames.FAUCET_ACCOUNT_INDEX,
+            value: '1000000000',
+          }),
+        );
+      }
 
       if (
         !appStates.find(

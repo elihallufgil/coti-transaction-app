@@ -11,7 +11,7 @@ import {
 import { TableNames } from './table-names';
 import { TokensEntity } from './tokens.entity';
 import { ActivitiesEntity } from './activities.entity';
-import { address } from 'hardhat/internal/core/config/config-validation';
+import { TransactionsEntity } from './transactions.entity';
 
 @Entity(TableNames.ACCOUNTS)
 export class AccountsEntity extends BaseEntity {
@@ -26,6 +26,9 @@ export class AccountsEntity extends BaseEntity {
 
   @Column()
   address: string;
+
+  @Column()
+  isStuck: boolean;
 
   @OneToMany(() => TokensEntity, (token) => token.ownerAccount)
   tokens: TokensEntity[];
@@ -89,4 +92,62 @@ export const getAccountsToOnboard = async (
     where: { networkAesKey: IsNull() },
     take,
   });
+};
+
+export const getAccountsNonce = async (
+  manager: EntityManager,
+  indexes: number[],
+): Promise<
+  Map<
+    number,
+    {
+      index: number;
+      maxStuckNonce: number;
+      maxPendingNonce: number;
+      maxCompletedNonce: number;
+    }
+  >
+> => {
+  const accountsRepository = manager.getRepository(AccountsEntity);
+  const resMap = new Map<
+    number,
+    {
+      index: number;
+      maxStuckNonce: number;
+      maxPendingNonce: number;
+      maxCompletedNonce: number;
+    }
+  >();
+  const res = await accountsRepository
+    .createQueryBuilder('accounts')
+    .leftJoin(
+      TransactionsEntity,
+      'transactions',
+      'accounts.address = transactions.from',
+    )
+    .select('accounts.index', 'index')
+    .addSelect(
+      'MAX(CASE WHEN transaction.status = 2 THEN transaction.amount ELSE NULL END)',
+      'maxStuckNonce',
+    )
+    .addSelect(
+      'MAX(CASE WHEN transaction.status = 1 THEN transaction.amount ELSE NULL END)',
+      'maxPendingNonce',
+    )
+    .addSelect(
+      'MAX(CASE WHEN transaction.status = 1 THEN transaction.amount ELSE NULL END)',
+      'maxCompletedNonce',
+    )
+    .where({ index: In(indexes) })
+    .groupBy('accounts.index')
+    .getRawMany<{
+      index: number;
+      maxStuckNonce: number;
+      maxPendingNonce: number;
+      maxCompletedNonce: number;
+    }>();
+  for (const row of res) {
+    resMap.set(row.index, row);
+  }
+  return resMap;
 };

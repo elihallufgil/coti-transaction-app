@@ -20,6 +20,7 @@ import {
   getLastHourActivityPerAction,
   getTokensCount,
   getTransactionWithStatusNull,
+  isFaucetPendingTransactionToBig,
   isThereVerifiedTransactionInTheLast5Min,
   TokensEntity,
 } from '../entities';
@@ -196,7 +197,18 @@ export class CronService {
   }
 
   async handleCreateAccount(action: ActionsEntity) {
-    // TODO: handle faucet protection
+    const manager = this.datasource.manager;
+    // faucet protection
+    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(
+      manager,
+      this.configService,
+    );
+    if (isFaucetSendToMuch) {
+      this.logger.warn(
+        `[runSlowActivities][handleCreateToken]Faucet pending transactions count is too big`,
+      );
+      return;
+    }
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     this.logger.log(
@@ -343,7 +355,18 @@ export class CronService {
   }
 
   async handleSendCotiFromFaucet(action: ActionsEntity) {
-    // TODO: implement faucet protection
+    // faucet protection
+    const manager = this.datasource.manager;
+    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(
+      manager,
+      this.configService,
+    );
+    if (isFaucetSendToMuch) {
+      this.logger.warn(
+        `[runSlowActivities][handleCreateToken]Faucet pending transactions count is too big`,
+      );
+      return;
+    }
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     this.logger.log(
@@ -371,7 +394,17 @@ export class CronService {
 
   async handleCreateToken(action: ActionsEntity) {
     const manager = this.datasource.manager;
-    // TODO: implement faucet protection
+    // faucet protection
+    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(
+      manager,
+      this.configService,
+    );
+    if (isFaucetSendToMuch) {
+      this.logger.warn(
+        `[runSlowActivities][handleCreateToken]Faucet pending transactions count is too big`,
+      );
+      return;
+    }
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     const isPrivate = action.type === ActionEnum.CreatePrivateToken;

@@ -4,6 +4,9 @@ import { BaseEntity } from './base.entity';
 import { TransactionResponse } from 'ethers';
 import { getAppStateByName } from './app-states.entity';
 import { AppStateNames } from '../types/app-state-names';
+import { HDNodeWallet } from 'ethers/lib.esm';
+import { ConfigService } from '@nestjs/config';
+import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 
 @Entity(TableNames.TRANSACTIONS)
 export class TransactionsEntity extends BaseEntity {
@@ -110,13 +113,21 @@ export const isThereVerifiedTransactionInTheLast5Min = async (
 
 export const isFaucetPendingTransactionToBig = async (
   manager: EntityManager,
+  configService: ConfigService,
 ): Promise<boolean> => {
-  // const transaction = await manager.findOne(TransactionsEntity, {
-  //   where: { status: 1, updateTime: now },
-  // });
-  // const pendingTransaction = await manager.findOne(TransactionsEntity, {
-  //   where: { status: In([0, 2]) },
-  // });
-  // return !!transaction || !pendingTransaction;
-  return false;
+  const appState = await getAppStateByName(
+    manager,
+    AppStateNames.FAUCET_ACCOUNT_INDEX,
+    false,
+  );
+  const seedPhrase = configService.get<string>(
+    CotiTransactionsEnvVariableNames.SEED_PHRASE,
+  );
+  const wallet = HDNodeWallet.fromPhrase(seedPhrase, null, `m/44'/60'/0'/0`);
+  const faucetWallet = wallet.derivePath(appState.value);
+  const pendingTransactionCount = await manager.count(TransactionsEntity, {
+    where: { from: faucetWallet.address, status: In([0, 2]) },
+  });
+
+  return pendingTransactionCount >= 5;
 };

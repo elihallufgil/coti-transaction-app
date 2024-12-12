@@ -1,4 +1,4 @@
-import { Column, Entity, EntityManager, IsNull } from 'typeorm';
+import { Column, Entity, EntityManager, In, IsNull } from 'typeorm';
 import { TableNames } from './table-names';
 import { BaseEntity } from './base.entity';
 import { TransactionResponse } from 'ethers';
@@ -90,4 +90,18 @@ export const getTransactionWithStatusNull = async (
     where: { status: IsNull() },
     take,
   });
+};
+
+export const isThereVerifiedTransactionInTheLast5Min = async (
+  manager: EntityManager,
+): Promise<boolean> => {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - 5);
+  const transaction = await manager.findOne(TransactionsEntity, {
+    where: { status: 1, updateTime: now },
+  });
+  const pendingTransaction = await manager.findOne(TransactionsEntity, {
+    where: { status: In([0, 2]) },
+  });
+  return !!transaction || !pendingTransaction;
 };

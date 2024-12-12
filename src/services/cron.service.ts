@@ -19,6 +19,7 @@ import {
   getLastHourActivityPerAction,
   getTokensCount,
   getTransactionWithStatusNull,
+  isThereVerifiedTransactionInTheLast5Min,
   TokensEntity,
 } from '../entities';
 import { formatEther, TransactionReceipt } from 'ethers';
@@ -90,8 +91,13 @@ export class CronService {
     });
   }
 
-  async runActivities() {
+  async runActivities(): Promise<void> {
     const manager = this.datasource.manager;
+    const isNetworkActive = isThereVerifiedTransactionInTheLast5Min(manager);
+    if (!isNetworkActive) {
+      this.logger.warn(`The network is stuck`);
+      return;
+    }
     const actions = await getAllActions(manager);
     const lastHourActivityPerActionMap =
       await getLastHourActivityPerAction(manager);
@@ -133,8 +139,13 @@ export class CronService {
     await Promise.allSettled(actionPromises);
   }
 
-  async runSlowActivities() {
+  async runSlowActivities(): Promise<void> {
     const manager = this.datasource.manager;
+    const isNetworkActive = isThereVerifiedTransactionInTheLast5Min(manager);
+    if (!isNetworkActive) {
+      this.logger.warn(`The network is stuck`);
+      return;
+    }
     const actions = await getAllActions(manager);
     const lastHourActivityPerActionMap =
       await getLastHourActivityPerAction(manager);

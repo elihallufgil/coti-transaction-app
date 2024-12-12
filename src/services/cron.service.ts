@@ -10,21 +10,31 @@ import { EthersService } from './ethers.service';
 import {
   AccountsEntity,
   ActionsEntity,
+  createTransactionEntity,
   findTokens,
+  getAccountByAddress,
   getAccountIndexesThatReceiveToken,
   getAccountsByIds,
   getAccountsByIndexes,
   getAccountsNonce,
   getAccountsToOnboard,
+  getActivityByTxId,
   getAllActions,
   getLastHourActivityPerAction,
   getTokensCount,
+  getTransactionWithStatusHandle,
   getTransactionWithStatusNull,
   isFaucetPendingTransactionToBig,
   isThereVerifiedTransactionInTheLast5Min,
   TokensEntity,
+  TransactionsEntity,
 } from '../entities';
-import { formatEther, TransactionReceipt, TransactionResponse } from 'ethers';
+import {
+  formatEther,
+  TransactionReceipt,
+  TransactionResponse,
+  Wallet,
+} from 'ethers';
 import { ActionEnum } from '../enums/action.enum';
 import { AppService } from '../app.service';
 
@@ -38,6 +48,85 @@ export class CronService {
     private readonly ethersService: EthersService,
     private readonly appService: AppService,
   ) {}
+
+  async cleanStuckAccounts() {
+    const manager = this.datasource.manager;
+    // get 20 accounts with status 2
+    let transactions = await getTransactionWithStatusHandle(manager, 20);
+    const txHashToReceiptMap: Map<string, TransactionReceipt | null> = new Map<
+      string,
+      TransactionReceipt | null
+    >();
+    // try to find in the node, if exist save it with the right params
+    const receiptPromises = [];
+    for (const tx of transactions) {
+      receiptPromises.push(
+        this.ethersService
+          .getTransactionReceipt(tx.hash)
+          .then((r) => txHashToReceiptMap.set(tx.hash, r)),
+      );
+    }
+    await Promise.allSettled(receiptPromises);
+
+    const transactionsWithReceipt = [];
+    for (const tx of transactions) {
+      const receipt = txHashToReceiptMap.get(tx.hash);
+      if (receipt) {
+        transactionsWithReceipt.push(tx.id);
+        tx.status = receipt.status;
+        tx.blockNumber = receipt.blockNumber;
+        tx.gasUsed = receipt.gasUsed.toString();
+        tx.index = receipt.index;
+        if (receipt.gasPrice) tx.gasPrice = receipt.gasPrice.toString();
+      }
+    }
+    await manager.save(
+      transactions.filter((t) => transactionsWithReceipt.includes(t.id)),
+    );
+    transactions = transactions.filter(
+      (t) => !transactionsWithReceipt.includes(t.id),
+    );
+    // iterate over them
+    const transactionCancelPromises = [];
+    for (const transaction of transactions) {
+      transactionCancelPromises.push(this.handleTransactionCancel(transaction));
+    }
+    await Promise.allSettled(receiptPromises);
+  }
+
+  async handleTransactionCancel(
+    transaction: TransactionsEntity,
+  ): Promise<void> {
+    const manager = this.datasource.manager;
+    // check if actual nonce is greater if yes mark it canceled and the activity canceled
+    const actualNonce = await this.ethersService.getNextNonce(transaction.from);
+    const activity = await getActivityByTxId(manager, transaction.id);
+    if (actualNonce > transaction.nonce) {
+      transaction.isCanceled = true;
+      activity.isCanceled = true;
+      await manager.save([transaction, activity]);
+      return;
+    }
+    // if there isen't send a cancel transaction
+    const account = await getAccountByAddress(manager, transaction.from);
+    const wallet = new Wallet(account.privateKey);
+    const tx = await wallet.sendTransaction({
+      from: account.address,
+      to: account.address,
+      value: 0n,
+      nonce: transaction.nonce,
+    });
+    // .wait the cancel transaction
+    const txSendResult = await this.awaitWithTimeout(tx.wait(), 10000);
+    if (!txSendResult) return;
+    await createTransactionEntity(manager, tx);
+
+    // if succeed save the cancel transaction and mark the old transaction and the activity as canceled
+    transaction.isCanceled = true;
+    activity.isCanceled = true;
+    await manager.save([transaction, activity]);
+    return;
+  }
 
   async checkTransactionsComplete() {
     const manager = this.datasource.manager;
@@ -391,9 +480,9 @@ export class CronService {
       `[runActivities][handleSendCotiFromFaucet][${activityCount} tx(s) sent coti from faucet]`,
     );
   }
-  async awaitWithTimeout(promise, timeoutMs) {
+  async awaitWithTimeout<T>(promise: Promise<T>, timeoutMs) {
     // Create a promise that rejects after the timeout
-    const timeoutPromise = new Promise((_, reject) =>
+    const timeoutPromise: Promise<void> = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('Operation timed out')), timeoutMs),
     );
 

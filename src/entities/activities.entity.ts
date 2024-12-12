@@ -4,7 +4,6 @@ import { TableNames } from './table-names';
 import { ActionsEntity } from './actions.entity';
 import { ActionEnum } from '../enums/action.enum';
 import { AccountsEntity } from './accounts.entity';
-import { Logger } from '@nestjs/common';
 
 @Entity(TableNames.ACTIVITIES)
 export class ActivitiesEntity extends BaseEntity {
@@ -25,6 +24,9 @@ export class ActivitiesEntity extends BaseEntity {
 
   @Column()
   data: string;
+
+  @Column()
+  isCanceled: boolean;
 
   @ManyToOne(() => ActionsEntity)
   @JoinColumn({ name: 'actionId' })
@@ -55,6 +57,7 @@ export const getLastHourActivityPerAction = async (
     .select('actions.type', 'actionType')
     .addSelect('COUNT(activities.id)', 'activityCount')
     .where('activities.createTime >= :oneHourAgo', { oneHourAgo })
+    .andWhere('activities.isCanceled = false')
     .groupBy('actions.type')
     .getRawMany<{ activityCount: number; actionType: ActionEnum }>();
   const actionToActivityCountMap = new Map<ActionEnum, number>();
@@ -80,4 +83,12 @@ export const getAccountIndexesThatReceiveToken = async (
     .groupBy('accounts.index')
     .getRawMany<{ accountIndex: number }>();
   return res.map((x) => x.accountIndex);
+};
+
+export const getActivityByTxId = async (
+  manager: EntityManager,
+  transactionId: number,
+): Promise<ActivitiesEntity> => {
+  const activitiesRepository = manager.getRepository(ActivitiesEntity);
+  return activitiesRepository.findOne({ where: { transactionId } });
 };

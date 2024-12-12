@@ -23,5 +23,7 @@ export function getEnvValidationConfig() {
     CHECK_TRANSACTION_COMPLETE_ENABLED: Joi.boolean().exist(),
     RUN_SLOW_ACTIVITIES_INTERVAL_IN_SECONDS: Joi.number().exist(),
     RUN_SLOW_ACTIVITIES_ENABLED: Joi.boolean().exist(),
+    CLEAN_STUCK_ACCOUNTS_INTERVAL_IN_SECONDS: Joi.number().exist(),
+    CLEAN_STUCK_ACCOUNTS_ENABLED: Joi.boolean().exist(),
   });
 }

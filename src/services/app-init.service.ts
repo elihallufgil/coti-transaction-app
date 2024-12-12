@@ -175,6 +175,13 @@ export class AppInitService implements OnModuleInit {
       CotiTransactionsEnvVariableNames.CHECK_TRANSACTION_COMPLETE_ENABLED,
     );
 
+    const cleanStuckAccountsInterval = this.configService.get<number>(
+      CotiTransactionsEnvVariableNames.CLEAN_STUCK_ACCOUNTS_INTERVAL_IN_SECONDS,
+    );
+    const cleanStuckAccountsEnabled = this.configService.get<boolean>(
+      CotiTransactionsEnvVariableNames.CLEAN_STUCK_ACCOUNTS_ENABLED,
+    );
+
     this.runEveryXSeconds(
       'RUN ACTIVITIES',
       this.cronService.runActivities.bind(this.cronService),
@@ -194,6 +201,13 @@ export class AppInitService implements OnModuleInit {
       this.cronService.checkTransactionsComplete.bind(this.cronService),
       checkTransactionCompleteInterval,
       checkTransactionCompleteEnabled,
+    );
+
+    this.runEveryXSeconds(
+      'CHECK TRANSACTIONS COMPLETE',
+      this.cronService.cleanStuckAccounts.bind(this.cronService),
+      cleanStuckAccountsInterval,
+      cleanStuckAccountsEnabled,
     );
   }
 }

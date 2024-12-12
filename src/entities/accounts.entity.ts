@@ -80,6 +80,13 @@ export const getAccountByIndex = async (
   return manager.findOne(AccountsEntity, { where: { index } });
 };
 
+export const getAccountByAddress = async (
+  manager: EntityManager,
+  address: string,
+): Promise<AccountsEntity> => {
+  return manager.findOne(AccountsEntity, { where: { address } });
+};
+
 export const getAccountByToken = async (
   manager: EntityManager,
   tokenId: number,

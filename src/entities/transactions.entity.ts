@@ -54,6 +54,9 @@ export class TransactionsEntity extends BaseEntity {
 
   @Column()
   hash: string;
+
+  @Column()
+  isCanceled: boolean;
 }
 
 export const createTransactionEntity = async (
@@ -93,6 +96,16 @@ export const getTransactionWithStatusNull = async (
 ): Promise<TransactionsEntity[]> => {
   return manager.find(TransactionsEntity, {
     where: { status: IsNull() },
+    take,
+  });
+};
+
+export const getTransactionWithStatusHandle = async (
+  manager: EntityManager,
+  take: number,
+): Promise<TransactionsEntity[]> => {
+  return manager.find(TransactionsEntity, {
+    where: { status: 2, isCanceled: false },
     take,
   });
 };

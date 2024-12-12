@@ -391,7 +391,15 @@ export class CronService {
       `[runActivities][handleSendCotiFromFaucet][${activityCount} tx(s) sent coti from faucet]`,
     );
   }
+  async awaitWithTimeout(promise, timeoutMs) {
+    // Create a promise that rejects after the timeout
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Operation timed out')), timeoutMs),
+    );
 
+    // Race the provided promise and the timeout promise
+    return Promise.race([promise, timeoutPromise]);
+  }
   async handleCreateToken(action: ActionsEntity) {
     const manager = this.datasource.manager;
     // faucet protection
@@ -453,7 +461,8 @@ export class CronService {
       toIndex: accountIndex,
       amountInCoti: '5',
     });
-    await refillTx.wait();
+
+    await this.awaitWithTimeout(refillTx.wait(), 5000);
 
     await this.appService.createNewToken({
       accountIndex,

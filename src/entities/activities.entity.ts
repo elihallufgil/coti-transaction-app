@@ -69,18 +69,7 @@ export const getAccountIndexesThatReceiveToken = async (
   tokenId: number,
   isPrivate?: boolean,
 ): Promise<number[]> => {
-  const logger = new Logger('getAccountIndexesThatReceiveToken');
   const activitiesRepository = manager.getRepository(ActivitiesEntity);
-  const query = activitiesRepository
-    .createQueryBuilder('activities')
-    .leftJoin(AccountsEntity, 'accounts', 'accounts.address = activities.to')
-    .select('accounts.index', 'accountIndex')
-    .where('activities.tokenId = :tokenId', { tokenId })
-    .andWhere('activities.to IS NOT NULL')
-    .andWhere(`${isPrivate ? 'accounts.networkAesKey IS NOT NULL' : '1=1'}`)
-    .groupBy('accounts.index')
-    .getQuery();
-  logger.warn(query);
   const res = await activitiesRepository
     .createQueryBuilder('activities')
     .leftJoin(AccountsEntity, 'accounts', 'accounts.address = activities.to')

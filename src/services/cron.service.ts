@@ -13,6 +13,7 @@ import {
   findTokens,
   getAccountIndexesThatReceiveToken,
   getAccountsByIndexes,
+  getAccountsNonce,
   getAccountsToOnboard,
   getAllActions,
   getLastHourActivityPerAction,
@@ -197,6 +198,22 @@ export class CronService {
     );
   }
 
+  async isStuckAccounts(
+    manager: EntityManager,
+    indexes: number[],
+  ): Promise<Map<number, boolean>> {
+    const isStuckMap = new Map<number, boolean>();
+    // get latest nonce in the transaction and latest confirmed nonce
+    const nonceMap = await getAccountsNonce(manager, indexes);
+    for (const [key, value] of nonceMap) {
+      isStuckMap.set(
+        key,
+        value.maxCompletedNonce + 1 <
+          Math.max(value.maxStuckNonce, value.maxPendingNonce),
+      );
+    }
+    return isStuckMap;
+  }
   async handleSendCoti(action: ActionsEntity) {
     const manager = this.datasource.manager;
     const randomRange = action.randomRange;
@@ -210,10 +227,24 @@ export class CronService {
         count: activityCount,
       });
 
-    const accounts = await getAccountsByIndexes(
+    let accounts = await getAccountsByIndexes(
       manager,
       accountIndexesRes.accountsIndexes,
     );
+
+    const stuckMap = await this.isStuckAccounts(
+      manager,
+      accounts.map((x) => x.index),
+    );
+    for (const account of accounts) {
+      const isStuck = stuckMap.get(account.index);
+      if (isStuck) {
+        account.isStuck = true;
+      }
+    }
+    await manager.save(accounts);
+    accounts = accounts.filter((x) => !x.isStuck);
+    if (accounts.length % 2 !== 0) accounts.pop();
     const balanceMap = await this.ethersService.getBalances(
       accounts.map((a) => a.address),
     );

@@ -205,7 +205,7 @@ export class CronService {
     );
     if (isFaucetSendToMuch) {
       this.logger.warn(
-        `[runSlowActivities][handleCreateToken]Faucet pending transactions count is too big`,
+        `[runSlowActivities][handleCreateAccount] Faucet pending transactions count is too big`,
       );
       return;
     }
@@ -363,7 +363,7 @@ export class CronService {
     );
     if (isFaucetSendToMuch) {
       this.logger.warn(
-        `[runSlowActivities][handleCreateToken]Faucet pending transactions count is too big`,
+        `[runSlowActivities][handleSendCotiFromFaucet] Faucet pending transactions count is too big`,
       );
       return;
     }
@@ -401,7 +401,7 @@ export class CronService {
     );
     if (isFaucetSendToMuch) {
       this.logger.warn(
-        `[runSlowActivities][handleCreateToken]Faucet pending transactions count is too big`,
+        `[runSlowActivities][handleCreateToken] Faucet pending transactions count is too big`,
       );
       return;
     }

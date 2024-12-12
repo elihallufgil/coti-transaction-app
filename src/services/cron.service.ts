@@ -12,6 +12,7 @@ import {
   ActionsEntity,
   findTokens,
   getAccountIndexesThatReceiveToken,
+  getAccountsByIds,
   getAccountsByIndexes,
   getAccountsNonce,
   getAccountsToOnboard,
@@ -22,7 +23,7 @@ import {
   isThereVerifiedTransactionInTheLast5Min,
   TokensEntity,
 } from '../entities';
-import { formatEther, TransactionReceipt } from 'ethers';
+import { formatEther, TransactionReceipt, TransactionResponse } from 'ethers';
 import { ActionEnum } from '../enums/action.enum';
 import { AppService } from '../app.service';
 
@@ -195,6 +196,7 @@ export class CronService {
   }
 
   async handleCreateAccount(action: ActionsEntity) {
+    // TODO: handle faucet protection
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     this.logger.log(
@@ -247,15 +249,20 @@ export class CronService {
       manager,
       accounts.map((x) => x.index),
     );
+    let isStuckAccounts = false;
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
       if (isStuck) {
+        isStuckAccounts = true;
         account.isStuck = true;
       }
     }
-    await manager.save(accounts);
-    accounts = accounts.filter((x) => !x.isStuck);
-    if (accounts.length % 2 !== 0) accounts.pop();
+    if (isStuckAccounts) {
+      await manager.save(accounts);
+      accounts = accounts.filter((x) => !x.isStuck);
+      if (accounts.length % 2 !== 0) accounts.pop();
+    }
+
     const balanceMap = await this.ethersService.getBalances(
       accounts.map((a) => a.address),
     );
@@ -307,10 +314,23 @@ export class CronService {
     );
     if (activityCount === 0) return;
     const onboardPromises = [];
-    const accountsToOnboard = await getAccountsToOnboard(
+    let accountsToOnboard = await getAccountsToOnboard(manager, activityCount);
+    const stuckMap = await this.isStuckAccounts(
       manager,
-      activityCount,
+      accountsToOnboard.map((x) => x.index),
     );
+    let isStuckAccounts = false;
+    for (const account of accountsToOnboard) {
+      const isStuck = stuckMap.get(account.index);
+      if (isStuck) {
+        isStuckAccounts = true;
+        account.isStuck = true;
+      }
+    }
+    if (isStuckAccounts) {
+      await manager.save(accountsToOnboard);
+      accountsToOnboard = accountsToOnboard.filter((x) => !x.isStuck);
+    }
     for (const account of accountsToOnboard) {
       onboardPromises.push(
         this.appService.onboardAccount({ index: account.index }),
@@ -323,6 +343,7 @@ export class CronService {
   }
 
   async handleSendCotiFromFaucet(action: ActionsEntity) {
+    // TODO: implement faucet protection
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     this.logger.log(
@@ -349,6 +370,8 @@ export class CronService {
   }
 
   async handleCreateToken(action: ActionsEntity) {
+    const manager = this.datasource.manager;
+    // TODO: implement faucet protection
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     const isPrivate = action.type === ActionEnum.CreatePrivateToken;
@@ -359,9 +382,29 @@ export class CronService {
     const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
       count: activityCount,
     });
-
+    let accounts = await getAccountsByIndexes(
+      manager,
+      accountIndexesRes.accountsIndexes,
+    );
+    const stuckMap = await this.isStuckAccounts(
+      manager,
+      accounts.map((x) => x.index),
+    );
+    let isStuckAccounts = false;
+    for (const account of accounts) {
+      const isStuck = stuckMap.get(account.index);
+      if (isStuck) {
+        isStuckAccounts = true;
+        account.isStuck = true;
+      }
+    }
+    if (isStuckAccounts) {
+      await manager.save(accounts);
+      accounts = accounts.filter((x) => !x.isStuck);
+    }
+    const accountIndexes = accounts.map((x) => x.index);
     const createTokenPromises = [];
-    for (const accountIndex of accountIndexesRes.accountsIndexes) {
+    for (const accountIndex of accountIndexes) {
       createTokenPromises.push(
         this.createTokenWrapper(accountIndex, isPrivate),
       );
@@ -412,7 +455,28 @@ export class CronService {
       skip: randomSkip,
       take: activityCount,
     };
-    const tokens = await findTokens(manager, findManyOptions);
+    let tokens = await findTokens(manager, findManyOptions);
+    const tokensOwnerIds = tokens.map((t) => t.ownerAccountId);
+    let accounts = await getAccountsByIds(manager, tokensOwnerIds);
+    const stuckMap = await this.isStuckAccounts(
+      manager,
+      accounts.map((x) => x.index),
+    );
+    let isStuckAccounts = false;
+    for (const account of accounts) {
+      const isStuck = stuckMap.get(account.index);
+      if (isStuck) {
+        isStuckAccounts = true;
+        account.isStuck = true;
+      }
+    }
+    if (isStuckAccounts) {
+      await manager.save(accounts);
+      accounts = accounts.filter((x) => !x.isStuck);
+    }
+    tokens = tokens.filter((t) =>
+      accounts.find((a) => a.id === t.ownerAccountId),
+    );
     // send for each token
     const mintTokenPromises = [];
     for (const token of tokens) {
@@ -468,7 +532,7 @@ export class CronService {
     );
   }
 
-  async sendTokenWrapper(token: TokensEntity) {
+  async sendTokenWrapper(token: TokensEntity): Promise<TransactionResponse> {
     const manager = this.datasource.manager;
     // pick 1 account with affiliation to the token
     const accountsIndexThatReceivedToken =
@@ -487,8 +551,24 @@ export class CronService {
       randomIndex,
       accountToIndexRes.accountsIndexes[0],
     ]);
-
+    const stuckMap = await this.isStuckAccounts(
+      manager,
+      accounts.map((x) => x.index),
+    );
+    let isStuckAccounts = false;
+    for (const account of accounts) {
+      const isStuck = stuckMap.get(account.index);
+      if (isStuck) {
+        isStuckAccounts = true;
+        account.isStuck = true;
+      }
+    }
+    if (isStuckAccounts) {
+      await manager.save(accounts);
+      return;
+    }
     const fromAccount = accounts.find((x) => x.index === randomIndex);
+
     const toAccount = accounts.find((x) => x.index !== randomIndex);
     // get balances
     let bigintBalance = await this.ethersService.getErc20Balance(

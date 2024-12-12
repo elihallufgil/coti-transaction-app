@@ -2,6 +2,8 @@ import { Column, Entity, EntityManager, In, IsNull } from 'typeorm';
 import { TableNames } from './table-names';
 import { BaseEntity } from './base.entity';
 import { TransactionResponse } from 'ethers';
+import { getAppStateByName } from './app-states.entity';
+import { AppStateNames } from '../types/app-state-names';
 
 @Entity(TableNames.TRANSACTIONS)
 export class TransactionsEntity extends BaseEntity {
@@ -104,4 +106,17 @@ export const isThereVerifiedTransactionInTheLast5Min = async (
     where: { status: In([0, 2]) },
   });
   return !!transaction || !pendingTransaction;
+};
+
+export const isFaucetPendingTransactionToBig = async (
+  manager: EntityManager,
+): Promise<boolean> => {
+  // const transaction = await manager.findOne(TransactionsEntity, {
+  //   where: { status: 1, updateTime: now },
+  // });
+  // const pendingTransaction = await manager.findOne(TransactionsEntity, {
+  //   where: { status: In([0, 2]) },
+  // });
+  // return !!transaction || !pendingTransaction;
+  return false;
 };

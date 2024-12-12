@@ -59,6 +59,13 @@ export const getAccountsByIndexes = async (
   return manager.find(AccountsEntity, { where: { index: In(indexes) } });
 };
 
+export const getAccountsByIds = async (
+  manager: EntityManager,
+  ids: number[],
+): Promise<AccountsEntity[]> => {
+  return manager.find(AccountsEntity, { where: { index: In(ids) } });
+};
+
 export const getAccountsByAddresses = async (
   manager: EntityManager,
   addresses: string[],

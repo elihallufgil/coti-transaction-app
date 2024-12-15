@@ -109,15 +109,19 @@ export class CronService {
     }
     // if there isen't send a cancel transaction
     const account = await getAccountByAddress(manager, transaction.from);
-    const wallet = new Wallet(account.privateKey);
+    const wallet = new Wallet(account.privateKey, this.ethersService.provider);
     const tx = await wallet.sendTransaction({
       from: account.address,
       to: account.address,
       value: 0n,
       nonce: transaction.nonce,
+      type: 2,
+      maxFeePerGas: (BigInt(transaction.maxFeePerGas) * 110n) / 100n,
+      maxPriorityFeePerGas:
+        (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n,
     });
     // .wait the cancel transaction
-    const txSendResult = await this.awaitWithTimeout(tx.wait(), 10000);
+    const txSendResult = await this.awaitWithTimeout(tx.wait(), 25000);
     if (!txSendResult) return;
     await createTransactionEntity(manager, tx);
 
@@ -322,8 +326,11 @@ export class CronService {
     for (const [key, value] of nonceMap) {
       isStuckMap.set(
         key,
-        value.maxCompletedNonce + 1 <
-          Math.max(value.maxStuckNonce, value.maxPendingNonce),
+        (Number(value.maxCompletedNonce) || 0) + 1 <
+          Math.max(
+            Number(value.maxStuckNonce) || 0,
+            Number(value.maxPendingNonce) || 0,
+          ),
       );
     }
     return isStuckMap;
@@ -350,19 +357,13 @@ export class CronService {
       manager,
       accounts.map((x) => x.index),
     );
-    let isStuckAccounts = false;
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
-      if (isStuck) {
-        isStuckAccounts = true;
-        account.isStuck = true;
-      }
+      account.isStuck = !!isStuck;
     }
-    if (isStuckAccounts) {
-      await manager.save(accounts);
-      accounts = accounts.filter((x) => !x.isStuck);
-      if (accounts.length % 2 !== 0) accounts.pop();
-    }
+    await manager.save(accounts);
+    accounts = accounts.filter((x) => !x.isStuck);
+    if (accounts.length % 2 !== 0) accounts.pop();
 
     const balanceMap = await this.ethersService.getBalances(
       accounts.map((a) => a.address),
@@ -420,18 +421,15 @@ export class CronService {
       manager,
       accountsToOnboard.map((x) => x.index),
     );
-    let isStuckAccounts = false;
+
     for (const account of accountsToOnboard) {
       const isStuck = stuckMap.get(account.index);
-      if (isStuck) {
-        isStuckAccounts = true;
-        account.isStuck = true;
-      }
+
+      account.isStuck = !!isStuck;
     }
-    if (isStuckAccounts) {
-      await manager.save(accountsToOnboard);
-      accountsToOnboard = accountsToOnboard.filter((x) => !x.isStuck);
-    }
+    await manager.save(accountsToOnboard);
+    accountsToOnboard = accountsToOnboard.filter((x) => !x.isStuck);
+
     for (const account of accountsToOnboard) {
       onboardPromises.push(
         this.appService.onboardAccount({ index: account.index }),
@@ -520,18 +518,14 @@ export class CronService {
       manager,
       accounts.map((x) => x.index),
     );
-    let isStuckAccounts = false;
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
-      if (isStuck) {
-        isStuckAccounts = true;
-        account.isStuck = true;
-      }
+
+      account.isStuck = !!isStuck;
     }
-    if (isStuckAccounts) {
-      await manager.save(accounts);
-      accounts = accounts.filter((x) => !x.isStuck);
-    }
+
+    await manager.save(accounts);
+    accounts = accounts.filter((x) => !x.isStuck);
     const accountIndexes = accounts.map((x) => x.index);
     const createTokenPromises = [];
     for (const accountIndex of accountIndexes) {
@@ -551,7 +545,7 @@ export class CronService {
       amountInCoti: '5',
     });
 
-    await this.awaitWithTimeout(refillTx.wait(), 5000);
+    await this.awaitWithTimeout(refillTx.wait(), 25000);
 
     await this.appService.createNewToken({
       accountIndex,
@@ -593,18 +587,12 @@ export class CronService {
       manager,
       accounts.map((x) => x.index),
     );
-    let isStuckAccounts = false;
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
-      if (isStuck) {
-        isStuckAccounts = true;
-        account.isStuck = true;
-      }
+      account.isStuck = !!isStuck;
     }
-    if (isStuckAccounts) {
-      await manager.save(accounts);
-      accounts = accounts.filter((x) => !x.isStuck);
-    }
+    await manager.save(accounts);
+    accounts = accounts.filter((x) => !x.isStuck);
     tokens = tokens.filter((t) =>
       accounts.find((a) => a.id === t.ownerAccountId),
     );
@@ -686,20 +674,15 @@ export class CronService {
       manager,
       accounts.map((x) => x.index),
     );
-    let isStuckAccounts = false;
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
-      if (isStuck) {
-        isStuckAccounts = true;
-        account.isStuck = true;
-      }
+      account.isStuck = !!isStuck;
     }
-    if (isStuckAccounts) {
-      await manager.save(accounts);
-      return;
-    }
-    const fromAccount = accounts.find((x) => x.index === randomIndex);
 
+    await manager.save(accounts);
+
+    const fromAccount = accounts.find((x) => x.index === randomIndex);
+    if (fromAccount.isStuck) return;
     const toAccount = accounts.find((x) => x.index !== randomIndex);
     // get balances
     let bigintBalance = await this.ethersService.getErc20Balance(

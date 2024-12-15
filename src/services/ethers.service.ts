@@ -32,7 +32,7 @@ import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 @Injectable()
 export class EthersService {
   private readonly logger = new Logger(EthersService.name);
-  private readonly provider: Provider;
+  public readonly provider: Provider;
   private readonly websocketProvider: WebSocketProvider;
   private readonly onboardContractAddress: string;
 

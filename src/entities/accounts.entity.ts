@@ -141,18 +141,19 @@ export const getAccountsNonce = async (
     )
     .select('accounts.index', 'index')
     .addSelect(
-      'MAX(CASE WHEN transaction.status = 2 THEN transaction.amount ELSE NULL END)',
+      'MAX(CASE WHEN transactions.status = 2 THEN transactions.nonce ELSE NULL END)',
       'maxStuckNonce',
     )
     .addSelect(
-      'MAX(CASE WHEN transaction.status = 1 THEN transaction.amount ELSE NULL END)',
+      'MAX(CASE WHEN transactions.status = 1 THEN transactions.nonce ELSE NULL END)',
       'maxPendingNonce',
     )
     .addSelect(
-      'MAX(CASE WHEN transaction.status = 1 THEN transaction.amount ELSE NULL END)',
+      'MAX(CASE WHEN transactions.status = 1 THEN transactions.nonce ELSE NULL END)',
       'maxCompletedNonce',
     )
     .where({ index: In(indexes) })
+    .andWhere('transactions.isCanceled = false')
     .groupBy('accounts.index')
     .getRawMany<{
       index: number;
@@ -160,6 +161,7 @@ export const getAccountsNonce = async (
       maxPendingNonce: number;
       maxCompletedNonce: number;
     }>();
+
   for (const row of res) {
     resMap.set(row.index, row);
   }

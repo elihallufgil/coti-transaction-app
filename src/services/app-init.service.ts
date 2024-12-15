@@ -204,7 +204,7 @@ export class AppInitService implements OnModuleInit {
     );
 
     this.runEveryXSeconds(
-      'CHECK TRANSACTIONS COMPLETE',
+      'CLEAN STUCK TRANSACTIONS COMPLETE',
       this.cronService.cleanStuckAccounts.bind(this.cronService),
       cleanStuckAccountsInterval,
       cleanStuckAccountsEnabled,

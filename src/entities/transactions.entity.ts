@@ -4,7 +4,7 @@ import { BaseEntity } from './base.entity';
 import { TransactionResponse } from 'ethers';
 import { getAppStateByName } from './app-states.entity';
 import { AppStateNames } from '../types/app-state-names';
-import { HDNodeWallet } from 'ethers/lib.esm';
+import { HDNodeWallet } from 'ethers';
 import { ConfigService } from '@nestjs/config';
 import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 

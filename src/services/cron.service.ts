@@ -91,7 +91,7 @@ export class CronService {
     for (const transaction of transactions) {
       transactionCancelPromises.push(this.handleTransactionCancel(transaction));
     }
-    await Promise.allSettled(receiptPromises);
+    await Promise.allSettled(transactionCancelPromises);
   }
 
   async handleTransactionCancel(

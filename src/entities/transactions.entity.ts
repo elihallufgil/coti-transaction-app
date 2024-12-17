@@ -1,10 +1,9 @@
 import { Column, Entity, EntityManager, In, IsNull } from 'typeorm';
 import { TableNames } from './table-names';
 import { BaseEntity } from './base.entity';
-import { TransactionResponse } from 'ethers';
+import { HDNodeWallet, TransactionResponse } from 'ethers';
 import { getAppStateByName } from './app-states.entity';
 import { AppStateNames } from '../types/app-state-names';
-import { HDNodeWallet } from 'ethers';
 import { ConfigService } from '@nestjs/config';
 import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 
@@ -59,22 +58,13 @@ export class TransactionsEntity extends BaseEntity {
   isCanceled: boolean;
 }
 
-export const createTransactionEntity = async (
-  manager: EntityManager,
-  transactionResponse: Partial<TransactionResponse>,
-): Promise<TransactionsEntity> => {
-  const partialTransactionEntity =
-    transactionResponseToPartialTransactionEntity(transactionResponse);
-  const transaction = manager.create(
-    TransactionsEntity,
-    partialTransactionEntity,
-  );
+export const createTransactionEntity = async (manager: EntityManager, transactionResponse: Partial<TransactionResponse>): Promise<TransactionsEntity> => {
+  const partialTransactionEntity = transactionResponseToPartialTransactionEntity(transactionResponse);
+  const transaction = manager.create(TransactionsEntity, partialTransactionEntity);
   return manager.save(transaction);
 };
 
-export const transactionResponseToPartialTransactionEntity = (
-  tx: Partial<TransactionResponse>,
-): Partial<TransactionsEntity> => {
+export const transactionResponseToPartialTransactionEntity = (tx: Partial<TransactionResponse>): Partial<TransactionsEntity> => {
   return {
     type: tx.type,
     nonce: tx.nonce,
@@ -90,29 +80,21 @@ export const transactionResponseToPartialTransactionEntity = (
   };
 };
 
-export const getTransactionWithStatusNull = async (
-  manager: EntityManager,
-  take: number,
-): Promise<TransactionsEntity[]> => {
+export const getTransactionWithStatusNull = async (manager: EntityManager, take: number): Promise<TransactionsEntity[]> => {
   return manager.find(TransactionsEntity, {
     where: { status: IsNull() },
     take,
   });
 };
 
-export const getTransactionWithStatusHandle = async (
-  manager: EntityManager,
-  take: number,
-): Promise<TransactionsEntity[]> => {
+export const getTransactionWithStatusHandle = async (manager: EntityManager, take: number): Promise<TransactionsEntity[]> => {
   return manager.find(TransactionsEntity, {
     where: { status: 2, isCanceled: false },
     take,
   });
 };
 
-export const isThereVerifiedTransactionInTheLast5Min = async (
-  manager: EntityManager,
-): Promise<boolean> => {
+export const isThereVerifiedTransactionInTheLast5Min = async (manager: EntityManager): Promise<boolean> => {
   const now = new Date();
   now.setMinutes(now.getMinutes() - 5);
   const transaction = await manager.findOne(TransactionsEntity, {
@@ -124,18 +106,9 @@ export const isThereVerifiedTransactionInTheLast5Min = async (
   return !!transaction || !pendingTransaction;
 };
 
-export const isFaucetPendingTransactionToBig = async (
-  manager: EntityManager,
-  configService: ConfigService,
-): Promise<boolean> => {
-  const appState = await getAppStateByName(
-    manager,
-    AppStateNames.FAUCET_ACCOUNT_INDEX,
-    false,
-  );
-  const seedPhrase = configService.get<string>(
-    CotiTransactionsEnvVariableNames.SEED_PHRASE,
-  );
+export const isFaucetPendingTransactionToBig = async (manager: EntityManager, configService: ConfigService): Promise<boolean> => {
+  const appState = await getAppStateByName(manager, AppStateNames.FAUCET_ACCOUNT_INDEX, false);
+  const seedPhrase = configService.get<string>(CotiTransactionsEnvVariableNames.SEED_PHRASE);
   const wallet = HDNodeWallet.fromPhrase(seedPhrase, null, `m/44'/60'/0'/0`);
   const faucetWallet = wallet.derivePath(appState.value);
   const pendingTransactionCount = await manager.count(TransactionsEntity, {

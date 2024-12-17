@@ -1,11 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  DataSource,
-  EntityManager,
-  FindManyOptions,
-  FindOptionsWhere,
-} from 'typeorm';
+import { DataSource, EntityManager, FindManyOptions, FindOptionsWhere } from 'typeorm';
 import { EthersService } from './ethers.service';
 import {
   AccountsEntity,
@@ -29,12 +24,7 @@ import {
   TokensEntity,
   TransactionsEntity,
 } from '../entities';
-import {
-  formatEther,
-  TransactionReceipt,
-  TransactionResponse,
-  Wallet,
-} from 'ethers';
+import { formatEther, TransactionReceipt, TransactionResponse, Wallet } from 'ethers';
 import { ActionEnum } from '../enums/action.enum';
 import { AppService } from '../app.service';
 
@@ -51,20 +41,20 @@ export class CronService {
 
   async cleanStuckAccounts() {
     const manager = this.datasource.manager;
-    // get 20 accounts with status 2
-    let transactions = await getTransactionWithStatusHandle(manager, 20);
-    const txHashToReceiptMap: Map<string, TransactionReceipt | null> = new Map<
-      string,
-      TransactionReceipt | null
-    >();
+    const random = Math.random();
+    const transactionNumber = Math.round(random * 20);
+    this.logger.log(`[cleanStuckAccounts][Getting ${transactionNumber} transaction(s) with status 2 and not cancelled]`);
+    const transactions = await getTransactionWithStatusHandle(manager, transactionNumber);
+    if (transactions.length == 0) {
+      this.logger.log(`[cleanStuckAccounts][Nothing to clean]`);
+      return;
+    }
+    this.logger.warn(`[cleanStuckAccounts][Found ${transactions.length} transaction(s) with status 2 and not cancelled]`);
+    const txHashToReceiptMap: Map<string, TransactionReceipt | null> = new Map<string, TransactionReceipt | null>();
     // try to find in the node, if exist save it with the right params
     const receiptPromises = [];
     for (const tx of transactions) {
-      receiptPromises.push(
-        this.ethersService
-          .getTransactionReceipt(tx.hash)
-          .then((r) => txHashToReceiptMap.set(tx.hash, r)),
-      );
+      receiptPromises.push(this.ethersService.getTransactionReceipt(tx.hash).then(r => txHashToReceiptMap.set(tx.hash, r)));
     }
     await Promise.allSettled(receiptPromises);
 
@@ -80,23 +70,25 @@ export class CronService {
         if (receipt.gasPrice) tx.gasPrice = receipt.gasPrice.toString();
       }
     }
-    await manager.save(
-      transactions.filter((t) => transactionsWithReceipt.includes(t.id)),
-    );
-    transactions = transactions.filter(
-      (t) => !transactionsWithReceipt.includes(t.id),
-    );
-    // iterate over them
-    const transactionCancelPromises = [];
-    for (const transaction of transactions) {
-      transactionCancelPromises.push(this.handleTransactionCancel(transaction));
+    if (transactionsWithReceipt.length > 0) {
+      this.logger.warn(`[cleanStuckAccounts][Updating ${transactionsWithReceipt.length} transaction(s) with receipt]`);
+      await manager.save(transactions.filter(t => transactionsWithReceipt.includes(t.id)));
     }
-    await Promise.allSettled(transactionCancelPromises);
+
+    const transactionsWithoutReceipt = transactions.filter(t => !transactionsWithReceipt.includes(t.id));
+    if (transactionsWithoutReceipt.length > 0) {
+      const transactionCancelPromises = [];
+      this.logger.warn(`[cleanStuckAccounts][Cleaning ${transactionsWithoutReceipt.length} transaction(s) without receipt]`);
+      for (const transactionWithoutReceipt of transactionsWithoutReceipt) {
+        transactionCancelPromises.push(this.handleTransactionCancel(transactionWithoutReceipt));
+      }
+      const transactionCancelResults = await Promise.allSettled(transactionCancelPromises);
+      const successfulCancellationResults = transactionCancelResults.filter(result => result.status === 'fulfilled');
+      this.logger.warn(`[cleanStuckAccounts][Successfully cleaned ${successfulCancellationResults.length} transaction(s)]`);
+    }
   }
 
-  async handleTransactionCancel(
-    transaction: TransactionsEntity,
-  ): Promise<void> {
+  async handleTransactionCancel(transaction: TransactionsEntity): Promise<void> {
     const manager = this.datasource.manager;
     // check if actual nonce is greater if yes mark it canceled and the activity canceled
     const actualNonce = await this.ethersService.getNextNonce(transaction.from);
@@ -107,7 +99,7 @@ export class CronService {
       await manager.save([transaction, activity]);
       return;
     }
-    // if there isen't send a cancel transaction
+    // if there isn't send a cancel transaction
     const account = await getAccountByAddress(manager, transaction.from);
     const wallet = new Wallet(account.privateKey, this.ethersService.provider);
     const tx = await wallet.sendTransaction({
@@ -117,19 +109,19 @@ export class CronService {
       nonce: transaction.nonce,
       type: 2,
       maxFeePerGas: (BigInt(transaction.maxFeePerGas) * 110n) / 100n,
-      maxPriorityFeePerGas:
-        (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n,
+      maxPriorityFeePerGas: (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n,
     });
     // .wait the cancel transaction
     const txSendResult = await this.awaitWithTimeout(tx.wait(), 25000);
-    if (!txSendResult) return;
+    if (!txSendResult) {
+      throw new Error(`In Block timeout for transaction ${transaction.id}`);
+    }
     await createTransactionEntity(manager, tx);
 
     // if succeed save the cancel transaction and mark the old transaction and the activity as canceled
     transaction.isCanceled = true;
     activity.isCanceled = true;
     await manager.save([transaction, activity]);
-    return;
   }
 
   async checkTransactionsComplete() {
@@ -137,24 +129,14 @@ export class CronService {
     await manager.transaction(async (transactionManager: EntityManager) => {
       const take = 20;
       // find up to 10 transaction from db with no status
-      const transactionsEntities = await getTransactionWithStatusNull(
-        transactionManager,
-        take,
-      );
-      this.logger.log(
-        `[checkTransactionsComplete][Found ${transactionsEntities.length}/${take} to handle]`,
-      );
+      const transactionsEntities = await getTransactionWithStatusNull(transactionManager, take);
+      this.logger.log(`[checkTransactionsComplete][Found ${transactionsEntities.length}/${take} to handle]`);
       if (!transactionsEntities?.length) return;
       // request receipts
-      const txHashToReceiptMap: Map<string, TransactionReceipt | null> =
-        new Map<string, TransactionReceipt | null>();
+      const txHashToReceiptMap: Map<string, TransactionReceipt | null> = new Map<string, TransactionReceipt | null>();
       const receiptPromises = [];
       for (const tx of transactionsEntities) {
-        receiptPromises.push(
-          this.ethersService
-            .getTransactionReceipt(tx.hash)
-            .then((r) => txHashToReceiptMap.set(tx.hash, r)),
-        );
+        receiptPromises.push(this.ethersService.getTransactionReceipt(tx.hash).then(r => txHashToReceiptMap.set(tx.hash, r)));
       }
       await Promise.allSettled(receiptPromises);
       // fill fields
@@ -162,16 +144,12 @@ export class CronService {
       for (const tx of transactionsEntities) {
         const receipt = txHashToReceiptMap.get(tx.hash);
         if (!receipt) {
-          this.logger.warn(
-            `[checkTransactionsComplete][Didnt find receipt for txHash ${tx.hash}]`,
-          );
+          this.logger.warn(`[checkTransactionsComplete][Didnt find receipt for txHash ${tx.hash}]`);
           const nowMinus10Minutes = new Date();
           nowMinus10Minutes.setMinutes(nowMinus10Minutes.getMinutes() - 10);
           const transactionCreateTime = tx.createTime;
           if (transactionCreateTime < nowMinus10Minutes) {
-            this.logger.warn(
-              `[checkTransactionsComplete][Timeout to handle receipt for txHash ${tx.hash}]`,
-            );
+            this.logger.warn(`[checkTransactionsComplete][Timeout to handle receipt for txHash ${tx.hash}]`);
             tx.status = 2;
           }
         } else {
@@ -194,24 +172,16 @@ export class CronService {
       return;
     }
     const actions = await getAllActions(manager);
-    const lastHourActivityPerActionMap =
-      await getLastHourActivityPerAction(manager);
+    const lastHourActivityPerActionMap = await getLastHourActivityPerAction(manager);
     const extendedActions: (ActionsEntity & {
       lastHourActivityCount: number;
-    })[] = actions.map((x) => ({
+    })[] = actions.map(x => ({
       ...x,
       lastHourActivityCount: lastHourActivityPerActionMap.get(x.type) || 0,
     }));
 
-    console.table(extendedActions, [
-      'type',
-      'randomRange',
-      'maxPerHour',
-      'lastHourActivityCount',
-    ]);
-    const filteredActions = extendedActions.filter(
-      (x) => x.randomRange > 0 && x.lastHourActivityCount < x.maxPerHour,
-    );
+    console.table(extendedActions, ['type', 'randomRange', 'maxPerHour', 'lastHourActivityCount']);
+    const filteredActions = extendedActions.filter(x => x.randomRange > 0 && x.lastHourActivityCount < x.maxPerHour);
     const actionPromises = [];
     if (filteredActions.length === 0) return;
     for (const action of filteredActions) {
@@ -242,24 +212,16 @@ export class CronService {
       return;
     }
     const actions = await getAllActions(manager);
-    const lastHourActivityPerActionMap =
-      await getLastHourActivityPerAction(manager);
+    const lastHourActivityPerActionMap = await getLastHourActivityPerAction(manager);
     const extendedActions: (ActionsEntity & {
       lastHourActivityCount: number;
-    })[] = actions.map((x) => ({
+    })[] = actions.map(x => ({
       ...x,
       lastHourActivityCount: lastHourActivityPerActionMap.get(x.type) || 0,
     }));
 
-    console.table(extendedActions, [
-      'type',
-      'randomRange',
-      'maxPerHour',
-      'lastHourActivityCount',
-    ]);
-    const filteredActions = extendedActions.filter(
-      (x) => x.randomRange > 0 && x.lastHourActivityCount < x.maxPerHour,
-    );
+    console.table(extendedActions, ['type', 'randomRange', 'maxPerHour', 'lastHourActivityCount']);
+    const filteredActions = extendedActions.filter(x => x.randomRange > 0 && x.lastHourActivityCount < x.maxPerHour);
     const actionPromises = [];
     if (filteredActions.length === 0) return;
     for (const action of filteredActions) {
@@ -292,82 +254,56 @@ export class CronService {
   async handleCreateAccount(action: ActionsEntity) {
     const manager = this.datasource.manager;
     // faucet protection
-    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(
-      manager,
-      this.configService,
-    );
+    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(manager, this.configService);
     if (isFaucetSendToMuch) {
-      this.logger.warn(
-        `[runSlowActivities][handleCreateAccount] Faucet pending transactions count is too big`,
-      );
+      this.logger.warn(`[runSlowActivities][handleCreateAccount] Faucet pending transactions count is too big`);
       return;
     }
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
-    this.logger.log(
-      `[runActivities][handleCreateAccount][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runActivities][handleCreateAccount][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
     for (let i = 0; i < activityCount; i++) {
       await this.appService.createAccount();
     }
-    this.logger.log(
-      `[runActivities][handleCreateAccount][${activityCount} created account]`,
-    );
+    this.logger.log(`[runActivities][handleCreateAccount][${activityCount} created account]`);
   }
 
-  async isStuckAccounts(
-    manager: EntityManager,
-    indexes: number[],
-  ): Promise<Map<number, boolean>> {
+  async isStuckAccounts(manager: EntityManager, indexes: number[]): Promise<Map<number, boolean>> {
     const isStuckMap = new Map<number, boolean>();
     // get latest nonce in the transaction and latest confirmed nonce
     const nonceMap = await getAccountsNonce(manager, indexes);
     for (const [key, value] of nonceMap) {
-      isStuckMap.set(
-        key,
-        (Number(value.maxCompletedNonce) || 0) + 1 <
-          Math.max(
-            Number(value.maxStuckNonce) || 0,
-            Number(value.maxPendingNonce) || 0,
-          ),
-      );
+      isStuckMap.set(key, (Number(value.maxCompletedNonce) || 0) + 1 < Math.max(Number(value.maxStuckNonce) || 0, Number(value.maxPendingNonce) || 0));
     }
     return isStuckMap;
   }
+
   async handleSendCoti(action: ActionsEntity) {
     const manager = this.datasource.manager;
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
-    this.logger.log(
-      `[runActivities][handleSendCoti][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runActivities][handleSendCoti][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
-    const accountIndexesRes =
-      await this.appService.pickRandomAccountsToSendCoti({
-        count: activityCount,
-      });
+    const accountIndexesRes = await this.appService.pickRandomAccountsToSendCoti({
+      count: activityCount,
+    });
 
-    let accounts = await getAccountsByIndexes(
-      manager,
-      accountIndexesRes.accountsIndexes,
-    );
+    let accounts = await getAccountsByIndexes(manager, accountIndexesRes.accountsIndexes);
 
     const stuckMap = await this.isStuckAccounts(
       manager,
-      accounts.map((x) => x.index),
+      accounts.map(x => x.index),
     );
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
       account.isStuck = !!isStuck;
     }
     await manager.save(accounts);
-    accounts = accounts.filter((x) => !x.isStuck);
+    accounts = accounts.filter(x => !x.isStuck);
     if (accounts.length % 2 !== 0) accounts.pop();
 
-    const balanceMap = await this.ethersService.getBalances(
-      accounts.map((a) => a.address),
-    );
+    const balanceMap = await this.ethersService.getBalances(accounts.map(a => a.address));
     const sendingCotiPromises = [];
 
     while (accounts.length) {
@@ -387,10 +323,7 @@ export class CronService {
       const sendingAccountBalance = balanceMap.get(sendingAccount.address);
       if (sendingAccountBalance === 0n) continue;
       // TODO: make it dynamic
-      const balanceToSend = this.replaceLessSignificantDigits(
-        sendingAccountBalance / 10n,
-        9,
-      );
+      const balanceToSend = this.replaceLessSignificantDigits(sendingAccountBalance / 10n, 9);
       if (balanceToSend === 0n) return;
       const amount = formatEther(balanceToSend).toString();
       sendingCotiPromises.push(
@@ -402,24 +335,20 @@ export class CronService {
       );
     }
     await Promise.allSettled(sendingCotiPromises);
-    this.logger.log(
-      `[runActivities][handleSendCoti][${activityCount} tx(s) sent coti]`,
-    );
+    this.logger.log(`[runActivities][handleSendCoti][${activityCount} tx(s) sent coti]`);
   }
 
   async handleOnboardAccount(action: ActionsEntity) {
     const manager = this.datasource.manager;
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
-    this.logger.log(
-      `[runActivities][handleOnboardAccount][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runActivities][handleOnboardAccount][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
     const onboardPromises = [];
     let accountsToOnboard = await getAccountsToOnboard(manager, activityCount);
     const stuckMap = await this.isStuckAccounts(
       manager,
-      accountsToOnboard.map((x) => x.index),
+      accountsToOnboard.map(x => x.index),
     );
 
     for (const account of accountsToOnboard) {
@@ -428,37 +357,26 @@ export class CronService {
       account.isStuck = !!isStuck;
     }
     await manager.save(accountsToOnboard);
-    accountsToOnboard = accountsToOnboard.filter((x) => !x.isStuck);
+    accountsToOnboard = accountsToOnboard.filter(x => !x.isStuck);
 
     for (const account of accountsToOnboard) {
-      onboardPromises.push(
-        this.appService.onboardAccount({ index: account.index }),
-      );
+      onboardPromises.push(this.appService.onboardAccount({ index: account.index }));
     }
     await Promise.allSettled(onboardPromises);
-    this.logger.log(
-      `[runActivities][handleOnboardAccount][${activityCount} tx(s) onboarded account]`,
-    );
+    this.logger.log(`[runActivities][handleOnboardAccount][${activityCount} tx(s) onboarded account]`);
   }
 
   async handleSendCotiFromFaucet(action: ActionsEntity) {
     // faucet protection
     const manager = this.datasource.manager;
-    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(
-      manager,
-      this.configService,
-    );
+    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(manager, this.configService);
     if (isFaucetSendToMuch) {
-      this.logger.warn(
-        `[runSlowActivities][handleSendCotiFromFaucet] Faucet pending transactions count is too big`,
-      );
+      this.logger.warn(`[runSlowActivities][handleSendCotiFromFaucet] Faucet pending transactions count is too big`);
       return;
     }
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
-    this.logger.log(
-      `[runActivities][handleSendCotiFromFaucet][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runActivities][handleSendCotiFromFaucet][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
     const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
       count: activityCount,
@@ -474,49 +392,37 @@ export class CronService {
       );
     }
     await Promise.allSettled(sendingCotiPromises);
-    this.logger.log(
-      `[runActivities][handleSendCotiFromFaucet][${activityCount} tx(s) sent coti from faucet]`,
-    );
+    this.logger.log(`[runActivities][handleSendCotiFromFaucet][${activityCount} tx(s) sent coti from faucet]`);
   }
+
   async awaitWithTimeout<T>(promise: Promise<T>, timeoutMs) {
     // Create a promise that rejects after the timeout
-    const timeoutPromise: Promise<void> = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Operation timed out')), timeoutMs),
-    );
+    const timeoutPromise: Promise<void> = new Promise((_, reject) => setTimeout(() => reject(new Error('Operation timed out')), timeoutMs));
 
     // Race the provided promise and the timeout promise
     return Promise.race([promise, timeoutPromise]);
   }
+
   async handleCreateToken(action: ActionsEntity) {
     const manager = this.datasource.manager;
     // faucet protection
-    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(
-      manager,
-      this.configService,
-    );
+    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(manager, this.configService);
     if (isFaucetSendToMuch) {
-      this.logger.warn(
-        `[runSlowActivities][handleCreateToken] Faucet pending transactions count is too big`,
-      );
+      this.logger.warn(`[runSlowActivities][handleCreateToken] Faucet pending transactions count is too big`);
       return;
     }
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     const isPrivate = action.type === ActionEnum.CreatePrivateToken;
-    this.logger.log(
-      `[runSlowActivities][handleCreateToken][${isPrivate ? 'private' : 'not private'}][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runSlowActivities][handleCreateToken][${isPrivate ? 'private' : 'not private'}][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
     const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
       count: activityCount,
     });
-    let accounts = await getAccountsByIndexes(
-      manager,
-      accountIndexesRes.accountsIndexes,
-    );
+    let accounts = await getAccountsByIndexes(manager, accountIndexesRes.accountsIndexes);
     const stuckMap = await this.isStuckAccounts(
       manager,
-      accounts.map((x) => x.index),
+      accounts.map(x => x.index),
     );
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
@@ -525,18 +431,14 @@ export class CronService {
     }
 
     await manager.save(accounts);
-    accounts = accounts.filter((x) => !x.isStuck);
-    const accountIndexes = accounts.map((x) => x.index);
+    accounts = accounts.filter(x => !x.isStuck);
+    const accountIndexes = accounts.map(x => x.index);
     const createTokenPromises = [];
     for (const accountIndex of accountIndexes) {
-      createTokenPromises.push(
-        this.createTokenWrapper(accountIndex, isPrivate),
-      );
+      createTokenPromises.push(this.createTokenWrapper(accountIndex, isPrivate));
     }
     await Promise.allSettled(createTokenPromises);
-    this.logger.log(
-      `[runSlowActivities][handleCreateToken][${isPrivate ? 'private' : 'not private'}][${activityCount} tx(s) created token]`,
-    );
+    this.logger.log(`[runSlowActivities][handleCreateToken][${isPrivate ? 'private' : 'not private'}][${activityCount} tx(s) created token]`);
   }
 
   async createTokenWrapper(accountIndex: number, isPrivate: boolean) {
@@ -560,9 +462,7 @@ export class CronService {
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     const isPrivate = action.type === ActionEnum.MintPrivateToken;
-    this.logger.log(
-      `[runSlowActivities][handleMintToken][${isPrivate ? 'private' : 'not private'}][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runSlowActivities][handleMintToken][${isPrivate ? 'private' : 'not private'}][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
     const accountIndexesRes = await this.appService.pickRandomAccountsToRefill({
       count: activityCount,
@@ -571,38 +471,31 @@ export class CronService {
     // get activity count tokens
     const tokensCount = await getTokensCount(manager, findOptions);
     if (tokensCount === 0) return;
-    const randomSkip =
-      activityCount >= tokensCount
-        ? 0
-        : Math.round(Math.random() * (tokensCount - activityCount));
+    const randomSkip = activityCount >= tokensCount ? 0 : Math.round(Math.random() * (tokensCount - activityCount));
     const findManyOptions: FindManyOptions<TokensEntity> = {
       where: findOptions,
       skip: randomSkip,
       take: activityCount,
     };
     let tokens = await findTokens(manager, findManyOptions);
-    const tokensOwnerIds = tokens.map((t) => t.ownerAccountId);
+    const tokensOwnerIds = tokens.map(t => t.ownerAccountId);
     let accounts = await getAccountsByIds(manager, tokensOwnerIds);
     const stuckMap = await this.isStuckAccounts(
       manager,
-      accounts.map((x) => x.index),
+      accounts.map(x => x.index),
     );
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
       account.isStuck = !!isStuck;
     }
     await manager.save(accounts);
-    accounts = accounts.filter((x) => !x.isStuck);
-    tokens = tokens.filter((t) =>
-      accounts.find((a) => a.id === t.ownerAccountId),
-    );
+    accounts = accounts.filter(x => !x.isStuck);
+    tokens = tokens.filter(t => accounts.find(a => a.id === t.ownerAccountId));
     // send for each token
     const mintTokenPromises = [];
     for (const token of tokens) {
       const toIndex = accountIndexesRes.accountsIndexes.pop();
-      const mintAmount =
-        BigInt(Math.round(Math.random() * 1000)) *
-        10n ** BigInt(token.decimals);
+      const mintAmount = BigInt(Math.round(Math.random() * 1000)) * 10n ** BigInt(token.decimals);
       mintTokenPromises.push(
         this.appService.mintToken({
           tokenId: token.id,
@@ -612,9 +505,7 @@ export class CronService {
       );
     }
     await Promise.allSettled(mintTokenPromises);
-    this.logger.log(
-      `[runSlowActivities][handleMintToken][${isPrivate ? 'private' : 'not private'}][${activityCount} tx(s) minted token]`,
-    );
+    this.logger.log(`[runSlowActivities][handleMintToken][${isPrivate ? 'private' : 'not private'}][${activityCount} tx(s) minted token]`);
   }
 
   async handleTransferToken(action: ActionsEntity) {
@@ -622,18 +513,13 @@ export class CronService {
     const randomRange = action.randomRange;
     const activityCount = Math.round(Math.random() * randomRange);
     const isPrivate = action.type === ActionEnum.TransferPrivateToken;
-    this.logger.log(
-      `[runSlowActivities][handleTransferToken][${isPrivate ? 'private' : 'not private'}][activityCount/randomRange ${activityCount}/${randomRange}]`,
-    );
+    this.logger.log(`[runSlowActivities][handleTransferToken][${isPrivate ? 'private' : 'not private'}][activityCount/randomRange ${activityCount}/${randomRange}]`);
     if (activityCount === 0) return;
     const findOptions: FindOptionsWhere<TokensEntity> = { isPrivate };
     // get activity count tokens
     const tokensCount = await getTokensCount(manager, findOptions);
     if (tokensCount === 0) return;
-    const randomSkip =
-      activityCount >= tokensCount
-        ? 0
-        : Math.round(Math.random() * (tokensCount - activityCount));
+    const randomSkip = activityCount >= tokensCount ? 0 : Math.round(Math.random() * (tokensCount - activityCount));
     const findManyOptions: FindManyOptions<TokensEntity> = {
       where: findOptions,
       skip: randomSkip,
@@ -646,33 +532,24 @@ export class CronService {
       transferTokenPromises.push(this.sendTokenWrapper(token));
     }
     await Promise.allSettled(transferTokenPromises);
-    this.logger.log(
-      `[runSlowActivities][handleTransferToken][${isPrivate ? 'private' : 'not private'}][${activityCount} tx(s) transferred token]`,
-    );
+    this.logger.log(`[runSlowActivities][handleTransferToken][${isPrivate ? 'private' : 'not private'}][${activityCount} tx(s) transferred token]`);
   }
 
   async sendTokenWrapper(token: TokensEntity): Promise<TransactionResponse> {
     const manager = this.datasource.manager;
     // pick 1 account with affiliation to the token
-    const accountsIndexThatReceivedToken =
-      await getAccountIndexesThatReceiveToken(manager, token.id);
-    const randomIndex =
-      accountsIndexThatReceivedToken[
-        Math.round(Math.random() * (accountsIndexThatReceivedToken.length - 1))
-      ];
+    const accountsIndexThatReceivedToken = await getAccountIndexesThatReceiveToken(manager, token.id);
+    const randomIndex = accountsIndexThatReceivedToken[Math.round(Math.random() * (accountsIndexThatReceivedToken.length - 1))];
     if (randomIndex === null) return;
     // pick 1 random account
     const accountToIndexRes = await this.appService.pickRandomAccountsToRefill({
       count: 1,
       banIndexList: [randomIndex],
     });
-    const accounts = await getAccountsByIndexes(manager, [
-      randomIndex,
-      accountToIndexRes.accountsIndexes[0],
-    ]);
+    const accounts = await getAccountsByIndexes(manager, [randomIndex, accountToIndexRes.accountsIndexes[0]]);
     const stuckMap = await this.isStuckAccounts(
       manager,
-      accounts.map((x) => x.index),
+      accounts.map(x => x.index),
     );
     for (const account of accounts) {
       const isStuck = stuckMap.get(account.index);
@@ -681,27 +558,16 @@ export class CronService {
 
     await manager.save(accounts);
 
-    const fromAccount = accounts.find((x) => x.index === randomIndex);
+    const fromAccount = accounts.find(x => x.index === randomIndex);
     if (fromAccount.isStuck) return;
-    const toAccount = accounts.find((x) => x.index !== randomIndex);
+    const toAccount = accounts.find(x => x.index !== randomIndex);
     // get balances
-    let bigintBalance = await this.ethersService.getErc20Balance(
-      token.address,
-      fromAccount.address,
-      token.isPrivate,
-    );
+    let bigintBalance = await this.ethersService.getErc20Balance(token.address, fromAccount.address, token.isPrivate);
     if (token.isPrivate) {
-      bigintBalance = await this.ethersService.decryptPrivateBalance(
-        fromAccount.privateKey,
-        fromAccount.networkAesKey,
-        bigintBalance,
-      );
+      bigintBalance = await this.ethersService.decryptPrivateBalance(fromAccount.privateKey, fromAccount.networkAesKey, bigintBalance);
     }
 
-    const balanceToSend = this.replaceLessSignificantDigits(
-      bigintBalance / 10n,
-      3,
-    );
+    const balanceToSend = this.replaceLessSignificantDigits(bigintBalance / 10n, 3);
     if (balanceToSend === 0n) return;
 
     return this.appService.transferToken({

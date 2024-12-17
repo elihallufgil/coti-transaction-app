@@ -375,6 +375,7 @@ export class AppService {
       );
     });
   }
+
   async getFaucetAddress(): Promise<GetFaucetWalletAddressResponse> {
     const manager = this.dataSource.manager;
     const [appStateError, appState] = await exec(

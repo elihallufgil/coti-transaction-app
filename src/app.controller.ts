@@ -43,37 +43,27 @@ export class AppController {
   }
 
   @Post('send-coti-from-faucet')
-  async sendCotiFromFaucet(
-    @Body() body: SendCotiFromFaucetRequest,
-  ): Promise<TransactionResponse> {
+  async sendCotiFromFaucet(@Body() body: SendCotiFromFaucetRequest): Promise<TransactionResponse> {
     return this.appService.sendCotiFromFaucet(body);
   }
 
   @Post('mint-token')
-  async mintToken(
-    @Body() body: MintTokenToAccountRequest,
-  ): Promise<TransactionResponse> {
+  async mintToken(@Body() body: MintTokenToAccountRequest): Promise<TransactionResponse> {
     return this.appService.mintToken(body);
   }
 
   @Post('transfer-token')
-  async transferToken(
-    @Body() body: TransferTokenToAccountRequest,
-  ): Promise<TransactionResponse> {
+  async transferToken(@Body() body: TransferTokenToAccountRequest): Promise<TransactionResponse> {
     return this.appService.transferToken(body);
   }
 
   @Post('onboard')
-  async onboardAccount(
-    @Body() body: OnboardAccountRequest,
-  ): Promise<TransactionResponse> {
+  async onboardAccount(@Body() body: OnboardAccountRequest): Promise<TransactionResponse> {
     return this.appService.onboardAccount(body);
   }
 
   @Post('pick-random-accounts-to-send-coti')
-  async pickRandomAccountsToSendCoti(
-    @Body() body: PickRandomAccountsToSendCotiRequest,
-  ): Promise<PickRandomAccountsToSendCotiResponse> {
+  async pickRandomAccountsToSendCoti(@Body() body: PickRandomAccountsToSendCotiRequest): Promise<PickRandomAccountsToSendCotiResponse> {
     return this.appService.pickRandomAccountsToSendCoti(body);
   }
 
@@ -88,16 +78,12 @@ export class AppController {
   }
 
   @Post('send-from-account-to-account')
-  async sendCotiFromAccountToAccount(
-    @Body() body: SendCotiFromAccountToAccountRequest,
-  ): Promise<TransactionResponse> {
+  async sendCotiFromAccountToAccount(@Body() body: SendCotiFromAccountToAccountRequest): Promise<TransactionResponse> {
     return this.appService.sendCotiFromAccountToAccount(body);
   }
 
   @Post('get-token-balance')
-  async getTokenBalance(
-    @Body() body: GetTokenBalanceRequest,
-  ): Promise<TokenBalanceResponse> {
+  async getTokenBalance(@Body() body: GetTokenBalanceRequest): Promise<TokenBalanceResponse> {
     return this.appService.getTokenBalance(body);
   }
 }

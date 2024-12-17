@@ -16,16 +16,8 @@ import {
   WebSocketProvider,
 } from 'ethers';
 
-import {
-  itUint,
-  OnboardInfo,
-  Wallet as CotiWallet,
-} from '@coti-io/coti-ethers';
-import {
-  ERC20__factory,
-  ERC20Token__factory,
-  PrivateERC20Token__factory,
-} from '../typechain-types';
+import { itUint, OnboardInfo, Wallet as CotiWallet } from '@coti-io/coti-ethers';
+import { ERC20__factory, ERC20Token__factory, PrivateERC20Token__factory } from '../typechain-types';
 import { ConfigService } from '@nestjs/config';
 import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 
@@ -37,41 +29,25 @@ export class EthersService {
   private readonly onboardContractAddress: string;
 
   constructor(private readonly configService: ConfigService) {
-    const rpcUrl = this.configService.get<string>(
-      CotiTransactionsEnvVariableNames.COTI_RPC_URL,
-    );
-    const wsRpcUrl = this.configService.get<string>(
-      CotiTransactionsEnvVariableNames.COTI_RPC_WEBSOCKET_URL,
-    );
-    const onboardContractAddress = this.configService.get<string>(
-      CotiTransactionsEnvVariableNames.COTI_ONBOARD_CONTRACT_ADDRESS,
-    );
+    const rpcUrl = this.configService.get<string>(CotiTransactionsEnvVariableNames.COTI_RPC_URL);
+    const wsRpcUrl = this.configService.get<string>(CotiTransactionsEnvVariableNames.COTI_RPC_WEBSOCKET_URL);
+    const onboardContractAddress = this.configService.get<string>(CotiTransactionsEnvVariableNames.COTI_ONBOARD_CONTRACT_ADDRESS);
     this.provider = new JsonRpcProvider(rpcUrl);
     this.websocketProvider = new WebSocketProvider(wsRpcUrl);
     this.onboardContractAddress = onboardContractAddress;
   }
+
   async getLatestBlock(): Promise<Block> {
     return this.provider.getBlock('latest');
   }
 
-  async getBlockByNumber(
-    blockNumber: number,
-    prefetchTxs: boolean = false,
-  ): Promise<Block> {
+  async getBlockByNumber(blockNumber: number, prefetchTxs: boolean = false): Promise<Block> {
     return this.provider.getBlock(blockNumber, prefetchTxs);
   }
 
-  async getBlockRange(
-    fromBlockNumber: number,
-    toBlockNumber: number,
-    prefetchTxs: boolean = false,
-  ): Promise<Block[]> {
+  async getBlockRange(fromBlockNumber: number, toBlockNumber: number, prefetchTxs: boolean = false): Promise<Block[]> {
     const blocksPromises = [];
-    for (
-      let blockNumber = fromBlockNumber;
-      blockNumber <= toBlockNumber;
-      blockNumber++
-    ) {
+    for (let blockNumber = fromBlockNumber; blockNumber <= toBlockNumber; blockNumber++) {
       blocksPromises.push(this.provider.getBlock(blockNumber, prefetchTxs));
     }
     return await Promise.all(blocksPromises);
@@ -81,20 +57,11 @@ export class EthersService {
     return this.provider.getLogs(filter);
   }
 
-  async getTransactionsReceipt(
-    txHashes: string[],
-  ): Promise<Map<string, TransactionReceipt>> {
-    const result: Map<string, TransactionReceipt> = new Map<
-      string,
-      TransactionReceipt
-    >();
+  async getTransactionsReceipt(txHashes: string[]): Promise<Map<string, TransactionReceipt>> {
+    const result: Map<string, TransactionReceipt> = new Map<string, TransactionReceipt>();
     const transactionReceiptsPromises = [];
     for (const txHash of txHashes) {
-      transactionReceiptsPromises.push(
-        this.provider
-          .getTransactionReceipt(txHash)
-          .then((tr) => result.set(tr.hash, tr)),
-      );
+      transactionReceiptsPromises.push(this.provider.getTransactionReceipt(txHash).then(tr => result.set(tr.hash, tr)));
     }
     await Promise.all(transactionReceiptsPromises);
     return result;
@@ -108,11 +75,7 @@ export class EthersService {
     const promises = [];
     const balanceMap = new Map<string, bigint>();
     for (const address of addresses) {
-      promises.push(
-        this.provider
-          .getBalance(address)
-          .then((x) => balanceMap.set(address, x)),
-      );
+      promises.push(this.provider.getBalance(address).then(x => balanceMap.set(address, x)));
     }
     await Promise.all(promises);
     return balanceMap;
@@ -126,52 +89,33 @@ export class EthersService {
       symbol: '',
     };
     const promises = [];
-    promises.push(erc20.name().then((x) => (details.name = x)));
-    promises.push(erc20.symbol().then((x) => (details.symbol = x)));
-    promises.push(erc20.decimals().then((x) => (details.decimals = x)));
+    promises.push(erc20.name().then(x => (details.name = x)));
+    promises.push(erc20.symbol().then(x => (details.symbol = x)));
+    promises.push(erc20.decimals().then(x => (details.decimals = x)));
     await Promise.all(promises);
     return details;
   }
 
-  async getErc20Balance(
-    contractAddress: string,
-    address: string,
-    isPrivate?: boolean,
-  ): Promise<bigint> {
+  async getErc20Balance(contractAddress: string, address: string, isPrivate?: boolean): Promise<bigint> {
     if (isPrivate) {
-      const privateERC20 = PrivateERC20Token__factory.connect(
-        contractAddress,
-        this.provider,
-      );
+      const privateERC20 = PrivateERC20Token__factory.connect(contractAddress, this.provider);
       return privateERC20['balanceOf(address)'](address);
     }
     const erc20 = ERC20__factory.connect(contractAddress, this.provider);
     return erc20['balanceOf(address)'](address);
   }
 
-  async getErc20Balances(
-    contractAddress: string,
-    addresses: string[],
-    isPrivate?: boolean,
-  ): Promise<Map<string, bigint>> {
+  async getErc20Balances(contractAddress: string, addresses: string[], isPrivate?: boolean): Promise<Map<string, bigint>> {
     const balanceMap = new Map<string, bigint>();
     const promises = [];
     for (const address of addresses) {
-      promises.push(
-        this.getErc20Balance(contractAddress, address, isPrivate).then((b) =>
-          balanceMap.set(address, b),
-        ),
-      );
+      promises.push(this.getErc20Balance(contractAddress, address, isPrivate).then(b => balanceMap.set(address, b)));
     }
     await Promise.all(promises);
     return balanceMap;
   }
 
-  async decryptPrivateBalance(
-    privateKey: string,
-    networkAesKey: string,
-    encryptedBalance: bigint,
-  ): Promise<bigint> {
+  async decryptPrivateBalance(privateKey: string, networkAesKey: string, encryptedBalance: bigint): Promise<bigint> {
     if (encryptedBalance === 0n) return encryptedBalance;
     const wallet = new CotiWallet(privateKey, this.provider, {
       aesKey: networkAesKey,
@@ -181,8 +125,7 @@ export class EthersService {
 
   async sendTransaction(transaction: Transaction): Promise<string> {
     const serializedTransaction = '0x' + transaction.serialized;
-    return (await this.provider.broadcastTransaction(serializedTransaction))
-      .hash;
+    return (await this.provider.broadcastTransaction(serializedTransaction)).hash;
   }
 
   async getTransaction(hash: string): Promise<TransactionResponse> {
@@ -197,12 +140,7 @@ export class EthersService {
    * @param nonce - override default nonce
    * @returns A promise that resolves to the transaction hash.
    */
-  async sendEthereum(
-    privateKey: string,
-    recipientAddress: string,
-    amountInEth: string,
-    nonce?: number,
-  ): Promise<TransactionResponse> {
+  async sendEthereum(privateKey: string, recipientAddress: string, amountInEth: string, nonce?: number): Promise<TransactionResponse> {
     try {
       // Create a wallet instance using the private key and connect to the provider
       const wallet = new Wallet(privateKey, this.provider);
@@ -242,9 +180,7 @@ export class EthersService {
     return wallet.getUserOnboardInfo();
   }
 
-  async getTransactionResponse(
-    txHash: string,
-  ): Promise<TransactionResponse | null> {
+  async getTransactionResponse(txHash: string): Promise<TransactionResponse | null> {
     try {
       // Validate the transaction hash
       if (!txHash || !txHash.startsWith('0x') || txHash.length !== 66) {
@@ -265,9 +201,7 @@ export class EthersService {
     }
   }
 
-  async getTransactionReceipt(
-    txHash: string,
-  ): Promise<TransactionReceipt | null> {
+  async getTransactionReceipt(txHash: string): Promise<TransactionReceipt | null> {
     try {
       // Validate the transaction hash
       if (!txHash || !txHash.startsWith('0x') || txHash.length !== 66) {
@@ -287,20 +221,13 @@ export class EthersService {
       throw error;
     }
   }
+
   async getNextNonce(address: string): Promise<number> {
     return this.provider.getTransactionCount(address, 'latest'); // Use 'latest' to get the next usable nonce
   }
 
-  async deployToken(params: {
-    privateKey: string;
-    tokenName: string;
-    tokenSymbol: string;
-    decimals: number;
-    owner: string;
-    isPrivate: boolean;
-  }) {
-    const { privateKey, tokenName, tokenSymbol, decimals, owner, isPrivate } =
-      params;
+  async deployToken(params: { privateKey: string; tokenName: string; tokenSymbol: string; decimals: number; owner: string; isPrivate: boolean }) {
+    const { privateKey, tokenName, tokenSymbol, decimals, owner, isPrivate } = params;
     const wallet = new Wallet(privateKey, this.provider);
 
     if (!isPrivate) {
@@ -312,22 +239,8 @@ export class EthersService {
     }
   }
 
-  async mintToken(params: {
-    privateKey: string;
-    tokenAddress: string;
-    to: string;
-    weiAmount: string;
-    isPrivate: boolean;
-    networkAesKey?: string;
-  }) {
-    const {
-      to,
-      privateKey,
-      tokenAddress,
-      weiAmount,
-      isPrivate,
-      networkAesKey,
-    } = params;
+  async mintToken(params: { privateKey: string; tokenAddress: string; to: string; weiAmount: string; isPrivate: boolean; networkAesKey?: string }) {
+    const { to, privateKey, tokenAddress, weiAmount, isPrivate, networkAesKey } = params;
     if (isPrivate && !networkAesKey) {
       throw new Error('To Mint private token you must provide Network AES key');
     }
@@ -339,42 +252,18 @@ export class EthersService {
       const token = ERC20Token__factory.connect(tokenAddress, wallet);
       return token.mint(to, weiAmount);
     } else {
-      const privateToken = PrivateERC20Token__factory.connect(
-        tokenAddress,
-        wallet,
-      );
-      const privateTokenInterface =
-        PrivateERC20Token__factory.createInterface();
+      const privateToken = PrivateERC20Token__factory.connect(tokenAddress, wallet);
+      const privateTokenInterface = PrivateERC20Token__factory.createInterface();
       const signature = 'mint';
-      const selector = this.getSelectorFromSignature(
-        privateTokenInterface.getFunction(signature).format('sighash'),
-      );
+      const selector = this.getSelectorFromSignature(privateTokenInterface.getFunction(signature).format('sighash'));
 
-      const itAmount = await wallet.encryptValue(
-        BigInt(weiAmount),
-        tokenAddress,
-        selector,
-      );
+      const itAmount = await wallet.encryptValue(BigInt(weiAmount), tokenAddress, selector);
       return privateToken.mint(to, itAmount as itUint);
     }
   }
 
-  async transferToken(params: {
-    privateKey: string;
-    tokenAddress: string;
-    to: string;
-    weiAmount: string;
-    isPrivate: boolean;
-    networkAesKey?: string;
-  }) {
-    const {
-      to,
-      privateKey,
-      tokenAddress,
-      weiAmount,
-      isPrivate,
-      networkAesKey,
-    } = params;
+  async transferToken(params: { privateKey: string; tokenAddress: string; to: string; weiAmount: string; isPrivate: boolean; networkAesKey?: string }) {
+    const { to, privateKey, tokenAddress, weiAmount, isPrivate, networkAesKey } = params;
     if (isPrivate && !networkAesKey) {
       throw new Error('To Mint private token you must provide Network AES key');
     }
@@ -386,26 +275,13 @@ export class EthersService {
       const token = ERC20Token__factory.connect(tokenAddress, wallet);
       return token.transfer(to, weiAmount);
     } else {
-      const privateToken = PrivateERC20Token__factory.connect(
-        tokenAddress,
-        wallet,
-      );
-      const privateTokenInterface =
-        PrivateERC20Token__factory.createInterface();
+      const privateToken = PrivateERC20Token__factory.connect(tokenAddress, wallet);
+      const privateTokenInterface = PrivateERC20Token__factory.createInterface();
       const signature = 'transfer(address,(uint256,bytes))';
-      const selector = this.getSelectorFromSignature(
-        privateTokenInterface.getFunction(signature).format('sighash'),
-      );
+      const selector = this.getSelectorFromSignature(privateTokenInterface.getFunction(signature).format('sighash'));
 
-      const itAmount = await wallet.encryptValue(
-        BigInt(weiAmount),
-        tokenAddress,
-        selector,
-      );
-      return privateToken['transfer(address,(uint256,bytes))'](
-        to,
-        itAmount as itUint,
-      );
+      const itAmount = await wallet.encryptValue(BigInt(weiAmount), tokenAddress, selector);
+      return privateToken['transfer(address,(uint256,bytes))'](to, itAmount as itUint);
     }
   }
 

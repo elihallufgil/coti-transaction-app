@@ -85,7 +85,11 @@ export class CronService {
       }
       const transactionCancelResults = await Promise.allSettled(transactionCancelPromises);
       const successfulCancellationResults = transactionCancelResults.filter(result => result.status === 'fulfilled');
+      const rejectedCancellationResults = transactionCancelResults.filter(result => result.status === 'rejected');
       this.logger.warn(`[cleanStuckAccounts][Successfully cleaned ${successfulCancellationResults.length} transaction(s)]`);
+      if (rejectedCancellationResults.length > 0) {
+        this.logger.error(`[cleanStuckAccounts][Error at cleaning ${rejectedCancellationResults.length} transaction(s)]`);
+      }
     }
   }
 
@@ -122,6 +126,7 @@ export class CronService {
       feeData.maxPriorityFeePerGas > (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n
         ? feeData.maxPriorityFeePerGas
         : (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n;
+    let error;
     for (let i = 0; i < 5; i++) {
       try {
         maxFeePerGas = (maxFeePerGas * BigInt(100 + i * 10)) / 100n;
@@ -140,8 +145,10 @@ export class CronService {
         if (e.code !== 'REPLACEMENT_UNDERPRICED') {
           throw e;
         }
+        error = e;
       }
     }
+    throw error;
   }
 
   async checkTransactionsComplete() {

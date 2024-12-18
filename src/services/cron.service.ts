@@ -24,7 +24,7 @@ import {
   TokensEntity,
   TransactionsEntity,
 } from '../entities';
-import { formatEther, TransactionReceipt, TransactionResponse, Wallet } from 'ethers';
+import { FeeData, formatEther, TransactionReceipt, TransactionResponse, Wallet } from 'ethers';
 import { ActionEnum } from '../enums/action.enum';
 import { AppService } from '../app.service';
 
@@ -42,7 +42,7 @@ export class CronService {
   async cleanStuckAccounts() {
     const manager = this.datasource.manager;
     const random = Math.random();
-    const transactionNumber = Math.round(random * 20);
+    const transactionNumber = Math.ceil(random * 20);
     this.logger.log(`[cleanStuckAccounts][Getting ${transactionNumber} transaction(s) with status 2 and not cancelled]`);
     const transactions = await getTransactionWithStatusHandle(manager, transactionNumber);
     if (transactions.length == 0) {
@@ -79,8 +79,9 @@ export class CronService {
     if (transactionsWithoutReceipt.length > 0) {
       const transactionCancelPromises = [];
       this.logger.warn(`[cleanStuckAccounts][Cleaning ${transactionsWithoutReceipt.length} transaction(s) without receipt]`);
+      const feeData = await this.ethersService.provider.getFeeData();
       for (const transactionWithoutReceipt of transactionsWithoutReceipt) {
-        transactionCancelPromises.push(this.handleTransactionCancel(transactionWithoutReceipt));
+        transactionCancelPromises.push(this.handleTransactionCancel(transactionWithoutReceipt, feeData));
       }
       const transactionCancelResults = await Promise.allSettled(transactionCancelPromises);
       const successfulCancellationResults = transactionCancelResults.filter(result => result.status === 'fulfilled');
@@ -88,7 +89,7 @@ export class CronService {
     }
   }
 
-  async handleTransactionCancel(transaction: TransactionsEntity): Promise<void> {
+  async handleTransactionCancel(transaction: TransactionsEntity, feeData: FeeData): Promise<void> {
     const manager = this.datasource.manager;
     // check if actual nonce is greater if yes mark it canceled and the activity canceled
     const actualNonce = await this.ethersService.getNextNonce(transaction.from);
@@ -101,16 +102,7 @@ export class CronService {
     }
     // if there isn't send a cancel transaction
     const account = await getAccountByAddress(manager, transaction.from);
-    const wallet = new Wallet(account.privateKey, this.ethersService.provider);
-    const tx = await wallet.sendTransaction({
-      from: account.address,
-      to: account.address,
-      value: 0n,
-      nonce: transaction.nonce,
-      type: 2,
-      maxFeePerGas: (BigInt(transaction.maxFeePerGas) * 110n) / 100n,
-      maxPriorityFeePerGas: (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n,
-    });
+    const tx = await this.sendCancellationTransaction(account, transaction, feeData);
     // .wait the cancel transaction
     const txSendResult = await this.awaitWithTimeout(tx.wait(), 25000);
     if (!txSendResult) {
@@ -122,6 +114,34 @@ export class CronService {
     transaction.isCanceled = true;
     activity.isCanceled = true;
     await manager.save([transaction, activity]);
+  }
+
+  async sendCancellationTransaction(account: AccountsEntity, transaction: TransactionsEntity, feeData: FeeData): Promise<TransactionResponse> {
+    let maxFeePerGas = feeData.maxFeePerGas > (BigInt(transaction.maxFeePerGas) * 110n) / 100n ? feeData.maxFeePerGas : (BigInt(transaction.maxFeePerGas) * 110n) / 100n;
+    let maxPriorityFeePerGas =
+      feeData.maxPriorityFeePerGas > (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n
+        ? feeData.maxPriorityFeePerGas
+        : (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n;
+    for (let i = 0; i < 5; i++) {
+      try {
+        maxFeePerGas = (maxFeePerGas * BigInt(100 + i * 10)) / 100n;
+        maxPriorityFeePerGas = (maxPriorityFeePerGas * BigInt(100 + i * 10)) / 100n;
+        const wallet = new Wallet(account.privateKey, this.ethersService.provider);
+        return await wallet.sendTransaction({
+          from: account.address,
+          to: account.address,
+          value: 0n,
+          nonce: transaction.nonce,
+          type: 2,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+        });
+      } catch (e) {
+        if (e.code !== 'REPLACEMENT_UNDERPRICED') {
+          throw e;
+        }
+      }
+    }
   }
 
   async checkTransactionsComplete() {

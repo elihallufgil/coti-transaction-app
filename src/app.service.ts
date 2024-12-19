@@ -189,20 +189,25 @@ export class AppService {
     return new TokenResponse(newTokenEntity);
   }
 
+  async getFaucetWallet(manager: EntityManager, lock = false) {
+    const [appStateError, appState] = await exec(getAppStateByName(manager, AppStateNames.FAUCET_ACCOUNT_INDEX, lock));
+    if (appStateError) {
+      throw new InternalServerErrorException('Could not get FAUCET_ACCOUNT_INDEX app state');
+    }
+
+    const seedPhrase = this.configService.get<string>(CotiTransactionsEnvVariableNames.SEED_PHRASE);
+    const wallet = HDNodeWallet.fromPhrase(seedPhrase, null, `m/44'/60'/0'/0`);
+    return wallet.derivePath(appState.value);
+  }
+
   async sendCotiFromFaucet(params: SendCotiFromFaucetRequest): Promise<TransactionResponse> {
     const manager = this.dataSource.manager;
     return manager.transaction(async (transactionManager: EntityManager) => {
-      const [appStateError, appState] = await exec(getAppStateByName(transactionManager, AppStateNames.FAUCET_ACCOUNT_INDEX, true));
-      if (appStateError) {
-        throw new InternalServerErrorException('Could not get FAUCET_ACCOUNT_INDEX app state');
-      }
       const [actionError, action] = await exec(getActionByType(transactionManager, ActionEnum.SendCotiFromFaucet, true));
       if (actionError) {
         throw new InternalServerErrorException('Could not get action');
       }
-      const seedPhrase = this.configService.get<string>(CotiTransactionsEnvVariableNames.SEED_PHRASE);
-      const wallet = HDNodeWallet.fromPhrase(seedPhrase, null, `m/44'/60'/0'/0`);
-      const faucetWallet = wallet.derivePath(appState.value);
+      const faucetWallet = await this.getFaucetWallet(transactionManager, true);
 
       const [accountError, account] = await exec(getAccountByIndex(transactionManager, params.toIndex));
       if (accountError) {
@@ -258,13 +263,7 @@ export class AppService {
 
   async getFaucetAddress(): Promise<GetFaucetWalletAddressResponse> {
     const manager = this.dataSource.manager;
-    const [appStateError, appState] = await exec(getAppStateByName(manager, AppStateNames.FAUCET_ACCOUNT_INDEX, false));
-    if (appStateError) {
-      throw new InternalServerErrorException('Could not get FAUCET_ACCOUNT_INDEX app state');
-    }
-    const seedPhrase = this.configService.get<string>(CotiTransactionsEnvVariableNames.SEED_PHRASE);
-    const wallet = HDNodeWallet.fromPhrase(seedPhrase, null, `m/44'/60'/0'/0`);
-    const faucetWallet = wallet.derivePath(appState.value);
+    const faucetWallet = await this.getFaucetWallet(manager);
     const nonce = await this.ethersService.getNextNonce(faucetWallet.address);
     return { address: faucetWallet.address, nonce };
   }

@@ -19,7 +19,7 @@ import {
   getTokensCount,
   getTransactionWithStatusHandle,
   getTransactionWithStatusNull,
-  isFaucetPendingTransactionToBig,
+  isFaucetPendingTransactionTooBig,
   isThereVerifiedTransactionInTheLast5Min,
   TokensEntity,
   TransactionsEntity,
@@ -106,7 +106,17 @@ export class CronService {
     }
     // if there isn't send a cancel transaction
     const account = await getAccountByAddress(manager, transaction.from);
-    const tx = await this.sendCancellationTransaction(account, transaction, feeData);
+    let wallet: Wallet;
+    if (account) {
+      wallet = new Wallet(account.privateKey, this.ethersService.provider);
+    } else {
+      const faucetWallet = await this.appService.getFaucetWallet(manager);
+      if (faucetWallet.address !== transaction.from) {
+        throw new Error(`Transaction fromAddress not found`);
+      }
+      wallet = new Wallet(faucetWallet.privateKey, this.ethersService.provider);
+    }
+    const tx = await this.sendCancellationTransaction(wallet, transaction, feeData);
     // .wait the cancel transaction
     const txSendResult = await this.awaitWithTimeout(tx.wait(), 25000);
     if (!txSendResult) {
@@ -120,7 +130,7 @@ export class CronService {
     await manager.save([transaction, activity]);
   }
 
-  async sendCancellationTransaction(account: AccountsEntity, transaction: TransactionsEntity, feeData: FeeData): Promise<TransactionResponse> {
+  async sendCancellationTransaction(wallet: Wallet, transaction: TransactionsEntity, feeData: FeeData): Promise<TransactionResponse> {
     let maxFeePerGas = feeData.maxFeePerGas > (BigInt(transaction.maxFeePerGas) * 110n) / 100n ? feeData.maxFeePerGas : (BigInt(transaction.maxFeePerGas) * 110n) / 100n;
     let maxPriorityFeePerGas =
       feeData.maxPriorityFeePerGas > (BigInt(transaction.maxPriorityFeePerGas) * 110n) / 100n
@@ -131,10 +141,9 @@ export class CronService {
       try {
         maxFeePerGas = (maxFeePerGas * BigInt(100 + i * 10)) / 100n;
         maxPriorityFeePerGas = (maxPriorityFeePerGas * BigInt(100 + i * 10)) / 100n;
-        const wallet = new Wallet(account.privateKey, this.ethersService.provider);
         return await wallet.sendTransaction({
-          from: account.address,
-          to: account.address,
+          from: wallet.address,
+          to: wallet.address,
           value: 0n,
           nonce: transaction.nonce,
           type: 2,
@@ -281,8 +290,9 @@ export class CronService {
   async handleCreateAccount(action: ActionsEntity) {
     const manager = this.datasource.manager;
     // faucet protection
-    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(manager, this.configService);
-    if (isFaucetSendToMuch) {
+    const { address: faucetAddress } = await this.appService.getFaucetAddress();
+    const isFaucetSendTooMuch = await isFaucetPendingTransactionTooBig(manager, faucetAddress);
+    if (isFaucetSendTooMuch) {
       this.logger.warn(`[runSlowActivities][handleCreateAccount] Faucet pending transactions count is too big`);
       return;
     }
@@ -396,8 +406,9 @@ export class CronService {
   async handleSendCotiFromFaucet(action: ActionsEntity) {
     // faucet protection
     const manager = this.datasource.manager;
-    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(manager, this.configService);
-    if (isFaucetSendToMuch) {
+    const { address: faucetAddress } = await this.appService.getFaucetAddress();
+    const isFaucetSendTooMuch = await isFaucetPendingTransactionTooBig(manager, faucetAddress);
+    if (isFaucetSendTooMuch) {
       this.logger.warn(`[runSlowActivities][handleSendCotiFromFaucet] Faucet pending transactions count is too big`);
       return;
     }
@@ -433,9 +444,10 @@ export class CronService {
   async handleCreateToken(action: ActionsEntity) {
     const manager = this.datasource.manager;
     // faucet protection
-    const isFaucetSendToMuch = await isFaucetPendingTransactionToBig(manager, this.configService);
-    if (isFaucetSendToMuch) {
-      this.logger.warn(`[runSlowActivities][handleCreateToken] Faucet pending transactions count is too big`);
+    const { address: faucetAddress } = await this.appService.getFaucetAddress();
+    const isFaucetSendTooMuch = await isFaucetPendingTransactionTooBig(manager, faucetAddress);
+    if (isFaucetSendTooMuch) {
+      this.logger.warn(`[runSlowActivities][handleCreateToken][Faucet pending transactions count is too big]`);
       return;
     }
     const randomRange = action.randomRange;

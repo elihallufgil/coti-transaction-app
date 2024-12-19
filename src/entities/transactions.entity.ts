@@ -1,11 +1,8 @@
 import { Column, Entity, EntityManager, In, IsNull } from 'typeorm';
 import { TableNames } from './table-names';
 import { BaseEntity } from './base.entity';
-import { HDNodeWallet, TransactionResponse } from 'ethers';
-import { getAppStateByName } from './app-states.entity';
-import { AppStateNames } from '../types/app-state-names';
+import { TransactionResponse } from 'ethers';
 import { ConfigService } from '@nestjs/config';
-import { CotiTransactionsEnvVariableNames } from '../types/env-validation.type';
 
 @Entity(TableNames.TRANSACTIONS)
 export class TransactionsEntity extends BaseEntity {
@@ -106,13 +103,9 @@ export const isThereVerifiedTransactionInTheLast5Min = async (manager: EntityMan
   return !!transaction || !pendingTransaction;
 };
 
-export const isFaucetPendingTransactionToBig = async (manager: EntityManager, configService: ConfigService): Promise<boolean> => {
-  const appState = await getAppStateByName(manager, AppStateNames.FAUCET_ACCOUNT_INDEX, false);
-  const seedPhrase = configService.get<string>(CotiTransactionsEnvVariableNames.SEED_PHRASE);
-  const wallet = HDNodeWallet.fromPhrase(seedPhrase, null, `m/44'/60'/0'/0`);
-  const faucetWallet = wallet.derivePath(appState.value);
+export const isFaucetPendingTransactionTooBig = async (manager: EntityManager, faucetAddress: string): Promise<boolean> => {
   const pendingTransactionCount = await manager.count(TransactionsEntity, {
-    where: { from: faucetWallet.address, status: In([0, 2]) },
+    where: { from: faucetAddress, status: In([0, 2]), isCanceled: false },
   });
 
   return pendingTransactionCount >= 5;
